@@ -2,13 +2,10 @@ import { config } from '../content/config.js';
 import { setupCommonElements } from './utils.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize common elements with 'services' page key
-    setupCommonElements('services');
+    setupCommonElements('weddings');
 
-    // --- Services Page Specific Logic ---
-
-    const container = document.getElementById('services-list');
-    const items = config.services.detailedItems || [];
+    const container = document.getElementById('wedding-services-list');
+    const items = config.weddingPage ? config.weddingPage.items : [];
 
     if (container && items.length > 0) {
         items.forEach((item) => {
@@ -20,10 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const attributionHtml = item.attribution 
                 ? `<div class="photo-attribution">${item.attribution}</div>` 
-                : '';
-
-            const buttonHtml = item.button 
-                ? `<div style="margin-top: 1rem;"><a href="${item.button.link}" class="button" style="font-size: 1rem; padding: 0.5rem 1rem;">${item.button.title}</a></div>` 
                 : '';
             
             const card = document.createElement('div');
@@ -37,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h2 class="service-title">${item.title}</h2>
                     <p class="service-description">${item.description}</p>
                     ${featuresHtml}
-                    ${buttonHtml}
                 </div>
             `;
             container.appendChild(card);
