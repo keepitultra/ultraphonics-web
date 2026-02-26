@@ -93,9 +93,18 @@ function compareSongLists(importList, dbSongs) {
     // Primary match: ablesetId field. Legacy fallback: doc id matches Ableset id.
     const dbByAblesetId = new Map();
     const dbByDocId = new Map();
+    // Name-based fallback — only indexes manual songs (no ablesetId yet)
+    const dbByTitle = new Map();
     for (const s of dbSongs) {
         if (s.ablesetId) dbByAblesetId.set(s.ablesetId, s);
         dbByDocId.set(s.id, s);
+        if (!s.ablesetId) {
+            const normalizedTitle = (s.title || s.name || '').toLowerCase().trim();
+            if (normalizedTitle) {
+                if (!dbByTitle.has(normalizedTitle)) dbByTitle.set(normalizedTitle, []);
+                dbByTitle.get(normalizedTitle).push(s);
+            }
+        }
     }
 
     const matchedAblesetIds = new Set();
@@ -104,12 +113,23 @@ function compareSongLists(importList, dbSongs) {
     const toArchive = [];
 
     for (const imported of importList) {
-        // Try ablesetId match first, then legacy doc-id match
+        // Tier 1: ablesetId field match
         let existing = dbByAblesetId.get(imported.id);
         let isLegacy = false;
+        let isNameMatch = false;
+        // Tier 2: legacy doc-id match
         if (!existing) {
             existing = dbByDocId.get(imported.id);
             if (existing) isLegacy = true;
+        }
+        // Tier 3: name-based match for manually-created songs that predate an Ableset upload
+        if (!existing) {
+            const parsedTitle = parseSongName(imported.lastKnownName).title.toLowerCase().trim();
+            const candidates = dbByTitle.get(parsedTitle) || [];
+            if (candidates.length === 1) {
+                existing = candidates[0];
+                isNameMatch = true;
+            }
         }
 
         if (!existing) {
@@ -119,8 +139,8 @@ function compareSongLists(importList, dbSongs) {
             const nameChanged = existing.ablesetName !== imported.lastKnownName;
             const timeChanged = existing.ablesetTime !== imported.time;
             const skippedChanged = (existing.ablesetSkipped || false) !== (imported.skipped || false);
-            if (nameChanged || timeChanged || skippedChanged || isLegacy) {
-                toUpdate.push({ existing, imported, isLegacy });
+            if (nameChanged || timeChanged || skippedChanged || isLegacy || isNameMatch) {
+                toUpdate.push({ existing, imported, isLegacy, isNameMatch });
             }
         }
     }
@@ -300,6 +320,62 @@ async function loadSongs() {
 
 // ---- Song List Rendering ----
 
+const GENRE_ORDER = ['Pop', 'Soul', 'Rock', 'Country', 'Other'];
+const GENRE_MAP = {
+    'pop': 'Pop',
+    'soul': 'Soul',
+    'r&b': 'Soul',
+    'rnb': 'Soul',
+    'rhythm and blues': 'Soul',
+    'rock': 'Rock',
+    'classic rock': 'Rock',
+    'country': 'Country',
+    'folk': 'Country',
+    'bluegrass': 'Country',
+};
+
+function renderSongItem(song) {
+    const title = song.title || song.name || 'Untitled';
+    const artist = song.artist || '';
+    const isSelected = selectedSongId === song.id;
+    const isArchived = song.active === false;
+    const key = song.key;
+    const capo = getSongCapo(song);
+    const eflat = getSongEflat(song);
+    const dropD = getSongDropD(song);
+
+    const keyBadge = key
+        ? `<span class="text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded font-mono">${key}</span>`
+        : '';
+    const tuningBadges = `
+        ${eflat ? '<span class="text-xs bg-purple-900/50 text-purple-400 px-2 py-0.5 rounded">Eb</span>' : ''}
+        ${dropD ? '<span class="text-xs bg-indigo-900/50 text-indigo-400 px-2 py-0.5 rounded">Drop D</span>' : ''}
+    `;
+    const capoBadge = capo > 0
+        ? `<span class="text-xs bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded">Capo ${capo}</span>`
+        : '';
+    const archivedBadge = isArchived
+        ? '<span class="text-xs bg-red-900/50 text-red-400 px-2 py-0.5 rounded">Archived</span>'
+        : '';
+
+    return `
+        <div class="song-item p-4 border-b border-stone-800 ${isSelected ? 'selected' : ''} ${isArchived ? 'opacity-50' : ''}" data-song-id="${song.id}">
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-white truncate">${escapeHtml(title)}</div>
+                    ${artist ? `<div class="text-sm text-stone-400 truncate">${escapeHtml(artist)}</div>` : ''}
+                </div>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    ${archivedBadge}
+                    ${tuningBadges}
+                    ${capoBadge}
+                    ${keyBadge}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderSongsList(filter = '') {
     const container = document.getElementById('songs-list-container');
 
@@ -321,51 +397,69 @@ function renderSongsList(filter = '') {
         return titleA.localeCompare(titleB);
     });
 
-    container.innerHTML = filtered.map(song => {
-        const title = song.title || song.name || 'Untitled';
-        const artist = song.artist || '';
-        const isSelected = selectedSongId === song.id;
-        const isArchived = song.active === false;
-        const key = song.key;
-        const capo = getSongCapo(song);
-        const eflat = getSongEflat(song);
-        const dropD = getSongDropD(song); // Get Drop D status
+    // Group songs by genre category
+    const groups = {};
+    GENRE_ORDER.forEach(g => groups[g] = []);
+    filtered.forEach(song => {
+        const rawGenre = (song.genre || '').toLowerCase().trim();
+        const mapped = GENRE_MAP[rawGenre] || 'Other';
+        groups[mapped].push(song);
+    });
 
-        const keyBadge = key
-            ? `<span class="text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded font-mono">${key}</span>`
-            : '';
-        const tuningBadges = `
-            ${eflat ? '<span class="text-xs bg-purple-900/50 text-purple-400 px-2 py-0.5 rounded">Eb</span>' : ''}
-            ${dropD ? '<span class="text-xs bg-indigo-900/50 text-indigo-400 px-2 py-0.5 rounded">Drop D</span>' : ''}
-        `;
-        const capoBadge = capo > 0
-            ? `<span class="text-xs bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded">Capo ${capo}</span>`
-            : '';
-        const archivedBadge = isArchived
-            ? '<span class="text-xs bg-red-900/50 text-red-400 px-2 py-0.5 rounded">Archived</span>'
-            : '';
+    const savedState = JSON.parse(localStorage.getItem('genreAccordionState') || '{}');
+    const isSearching = filter.trim() !== '';
 
-        return `
-            <div class="song-item p-4 border-b border-stone-800 ${isSelected ? 'selected' : ''} ${isArchived ? 'opacity-50' : ''}" data-song-id="${song.id}">
-                <div class="flex items-center justify-between gap-2">
-                    <div class="flex-1 min-w-0">
-                        <div class="font-bold text-white truncate">${escapeHtml(title)}</div>
-                        ${artist ? `<div class="text-sm text-stone-400 truncate">${escapeHtml(artist)}</div>` : ''}
+    let html = '';
+    let totalRendered = 0;
+
+    GENRE_ORDER.forEach(genre => {
+        const genreSongs = groups[genre];
+        if (genreSongs.length === 0) return;
+        totalRendered += genreSongs.length;
+
+        // Expand all groups when searching; otherwise use persisted state (default open)
+        const isOpen = isSearching ? true : (savedState[genre] !== false);
+
+        html += `
+            <div class="genre-accordion" data-genre="${genre}">
+                <button class="genre-header w-full flex items-center justify-between px-4 py-2.5 bg-stone-800/60 hover:bg-stone-800 border-b border-stone-700 transition-colors sticky top-0 z-10" data-genre="${genre}">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold uppercase tracking-widest text-stone-300">${genre}</span>
+                        <span class="text-xs text-stone-500 font-mono">${genreSongs.length}</span>
                     </div>
-                    <div class="flex items-center gap-1 flex-shrink-0">
-                        ${archivedBadge}
-                        ${tuningBadges}
-                        ${capoBadge}
-                        ${keyBadge}
-                    </div>
+                    <i class="fas fa-chevron-right text-xs text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}"></i>
+                </button>
+                <div class="genre-songs ${isOpen ? '' : 'hidden'}">
+                    ${genreSongs.map(song => renderSongItem(song)).join('')}
                 </div>
             </div>
         `;
-    }).join('');
+    });
+
+    if (totalRendered === 0) {
+        html = `<div class="p-8 text-center text-stone-500"><i class="fas fa-search text-2xl mb-2 block opacity-30"></i><p>No songs found</p></div>`;
+    }
+
+    container.innerHTML = html;
 
     document.getElementById('songs-counter').textContent = `${filtered.length} song${filtered.length !== 1 ? 's' : ''}`;
 
-    document.querySelectorAll('.song-item').forEach(item => {
+    // Accordion toggle
+    container.querySelectorAll('.genre-header').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const genre = btn.dataset.genre;
+            const songsDiv = btn.closest('.genre-accordion').querySelector('.genre-songs');
+            const chevron = btn.querySelector('.fa-chevron-right');
+            const isNowHidden = songsDiv.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-90', !isNowHidden);
+
+            const state = JSON.parse(localStorage.getItem('genreAccordionState') || '{}');
+            state[genre] = !isNowHidden;
+            localStorage.setItem('genreAccordionState', JSON.stringify(state));
+        });
+    });
+
+    container.querySelectorAll('.song-item').forEach(item => {
         item.addEventListener('click', () => selectSong(item.dataset.songId));
     });
 }
@@ -508,6 +602,7 @@ function showEditMode() {
     const song = songs.find(s => s.id === selectedSongId);
     if (!song) return;
 
+    document.getElementById('empty-state').classList.add('hidden');
     document.getElementById('song-view').classList.add('hidden');
     document.getElementById('song-edit').classList.remove('hidden');
 
@@ -531,7 +626,10 @@ function showEditMode() {
             </div>
             <div>
                 <label class="block text-sm font-semibold text-stone-300 mb-2">Genre</label>
-                <input type="text" id="edit-genre" value="${escapeHtml(song.genre || '')}" class="w-full px-4 py-3 bg-stone-800 border border-stone-700 rounded-lg text-white focus:outline-none focus:border-accent-green">
+                <select id="edit-genre" class="w-full px-4 py-3 bg-stone-800 border border-stone-700 rounded-lg text-white focus:outline-none focus:border-accent-green">
+                    <option value="">— Select Genre —</option>
+                    ${GENRE_ORDER.map(g => `<option value="${g}" ${song.genre === g ? 'selected' : ''}>${g}</option>`).join('')}
+                </select>
             </div>
             <div class="grid grid-cols-3 gap-4">
                 <div>
@@ -834,10 +932,11 @@ function showImportModal(diff) {
             displayTitle: u.existing.title || u.existing.ablesetName,
             ablesetName: u.imported.lastKnownName,
             ablesetTime: u.imported.time || 0,
-            ablesetSkipped: u.imported.skipped || false
+            ablesetSkipped: u.imported.skipped || false,
+            isNameMatch: u.isNameMatch || false
         };
-        // Legacy migration: add ablesetId if this song was matched by doc ID
-        if (u.isLegacy) {
+        // Stamp ablesetId for legacy migration or first-time name-matched songs
+        if (u.isLegacy || u.isNameMatch) {
             updateData.ablesetId = u.imported.id;
         }
         return updateData;
@@ -895,7 +994,7 @@ function showImportModal(diff) {
                 ${updateDocs.map(s => `
                     <div class="flex items-center justify-between px-3 py-2 bg-stone-800 rounded text-sm">
                         <span class="text-white truncate flex-1">${escapeHtml(s.displayTitle)}</span>
-                        <span class="text-stone-500 text-xs ml-2">${s.ablesetId ? 'migration + ' : ''}ableset data changed</span>
+                        <span class="text-stone-500 text-xs ml-2">${s.isNameMatch ? 'linked to Ableset' : s.ablesetId ? 'migration + ableset data' : 'ableset data changed'}</span>
                     </div>
                 `).join('')}
             </div>

@@ -166,6 +166,12 @@
                     </div>
                     <span class="font-semibold">Live Charts</span>
                 </a>
+                <a href="#" onclick="event.preventDefault(); const u = localStorage.getItem('ableset_url') || 'http://192.168.1.243'; window.open(u, '_blank', 'noopener,noreferrer');" class="flex items-center gap-4 px-4 py-3 text-white hover:bg-[#333] border-t border-[#444]">
+                    <div class="w-8 h-8 bg-gradient-to-br from-rose-400 to-red-500 rounded flex items-center justify-center text-black flex-shrink-0">
+                        <i class="fas fa-circle-play text-sm"></i>
+                    </div>
+                    <span class="font-semibold">Launch AbleSet</span>
+                </a>
             </div>
         </div>
         <div class="flex items-center gap-2">
@@ -180,9 +186,6 @@
             <button onclick="toggleViewMode()" id="btn-view-mode" class="text-xs px-3 py-2 bg-[#422006] border border-[#fbbf24] text-[#fcd34d] rounded-lg hover:bg-[#5c2d0e] transition-colors flex items-center gap-2" title="Toggle View Mode">
                 <i class="fas fa-edit" id="view-mode-icon"></i> <span class="hidden md:inline" id="view-mode-text">Edit</span>
             </button>
-            <a id="headerAblesetLink" href="#" target="_blank" onclick="return handleAblesetClick(event)" class="text-gray-400 hover:text-rose-400 transition-colors p-2 rounded-lg hover:bg-[#333]" title="Launch AbleSet">
-                <i class="fas fa-circle-play"></i>
-            </a>
             <button onclick="openSettings()" class="text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-[#333]" title="Settings">
                 <i class="fas fa-cog"></i>
             </button>
