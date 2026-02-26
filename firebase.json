@@ -6,8 +6,17 @@
       "**/.*",
       "**/node_modules/**",
       "scripts/**",
+      "src/**",
+      "server/**",
+      "content/**",
+      "build/**",
+      "dist-electron/**",
+      "electron-main.js",
       "package*.json",
+      "yarn.lock",
+      "jsconfig.json",
       "firestore.rules",
+      "firebase-migration.md",
       "*.md"
     ],
     "headers": [
