@@ -10,6 +10,7 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChang
 const ALLOWED_EMAILS = [
   'thomasdhickman@gmail.com',
   'an.fiolek@gmail.com',
+  'anthonynicholasfiolek@gmail.com',
   'keletate@gmail.com',
   'lesterburton17@gmail.com',
   'davidbigham1@gmail.com',
