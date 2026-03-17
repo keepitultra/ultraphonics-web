@@ -20,11 +20,11 @@ Desktop app for the main laptop. Connects to AbleSet and serves live song charts
 ## Development
 
 ```bash
-npm install
-npm run build           # Build Firebase bundle
-npm run start:electron  # Run Electron app locally
-npm run build:electron:mac  # Build macOS installer
-npm run deploy          # Deploy web app to Firebase
+yarn install
+yarn build              # Build all JS bundles into dist/
+yarn start:electron     # Run Electron app locally
+yarn build:electron:mac # Build macOS installer
+yarn deploy             # Build and deploy web app to Firebase
 ```
 
 ### Releasing
@@ -36,15 +36,23 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-### Development Scripts
+### Web Scripts
 
 ```bash
-npm run build          # Build Firebase bundle
-npm run build:dev      # Build with sourcemaps
-npm run build:icons    # Generate app icons
-npm run kill-ports     # Kill processes on ports 3000/8080/39052
-npm run migrate        # Run Firestore migrations
-npm run deploy:rules   # Deploy Firestore rules only
+yarn build             # Bundle all src/ JS into dist/ (minified)
+yarn build:dev         # Bundle with sourcemaps, no minification
+yarn serve             # Build and serve locally via Firebase emulator (localhost:5002)
+yarn preview           # Build and deploy to a Firebase preview channel
+yarn deploy            # Build and deploy hosting to production
+yarn deploy:rules      # Deploy Firestore security rules only
+```
+
+### Other Scripts
+
+```bash
+yarn build:icons       # Generate Electron app icons
+yarn kill-ports        # Kill processes on ports 3000/8080/39052
+yarn migrate           # Run Firestore migrations
 ```
 
 ---
