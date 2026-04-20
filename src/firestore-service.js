@@ -258,11 +258,11 @@ export async function getClients() {
  * @param {Function} callback
  * @returns {Function} Unsubscribe function
  */
-export function subscribeToClients(callback) {
+export function subscribeToClients(callback, onError) {
   return onSnapshot(collection(db, COLLECTIONS.CLIENTS), (snapshot) => {
     const clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     callback(clients);
-  });
+  }, onError);
 }
 
 /**
@@ -336,13 +336,13 @@ export async function addActivityLog(clientId, logData) {
  * @param {Function} callback - Called with array of logs on each update
  * @returns {Function} Unsubscribe function
  */
-export function subscribeToActivityLogs(clientId, callback) {
+export function subscribeToActivityLogs(clientId, callback, onError) {
   const logsRef = collection(db, COLLECTIONS.CLIENTS, clientId, 'activityLogs');
   const q = query(logsRef, orderBy('timestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     callback(logs);
-  });
+  }, onError);
 }
 
 /**
@@ -401,27 +401,31 @@ export function subscribeToSetlists(callback) {
 
 /**
  * Save a setlist
- * @param {string} name - Setlist name (used as document ID)
+ * @param {string} id - Document ID (GUID or legacy name)
+ * @param {string} name - Display name
  * @param {Array} songs - Array of song objects
+ * @param {Object} options - { vocalAssignments, segues }
  * @returns {Promise<void>}
  */
-export async function saveSetlist(name, songs) {
-  const docRef = doc(db, COLLECTIONS.SETLISTS, name);
+export async function saveSetlist(id, name, songs, options = {}) {
+  const docRef = doc(db, COLLECTIONS.SETLISTS, id);
   await setDoc(docRef, {
     name,
     songs,
     songCount: songs.filter(s => !s.lastKnownName?.startsWith('Set ')).length,
+    vocalAssignments: options.vocalAssignments || {},
+    segues: options.segues || {},
     updatedAt: new Date().toISOString()
   });
 }
 
 /**
- * Delete a setlist
- * @param {string} setlistName
+ * Delete a setlist by document ID
+ * @param {string} id - Document ID
  * @returns {Promise<void>}
  */
-export async function deleteSetlist(setlistName) {
-  const docRef = doc(db, COLLECTIONS.SETLISTS, setlistName);
+export async function deleteSetlist(id) {
+  const docRef = doc(db, COLLECTIONS.SETLISTS, id);
   await deleteDoc(docRef);
 }
 
