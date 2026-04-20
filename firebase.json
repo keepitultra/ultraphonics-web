@@ -1,27 +1,20 @@
 {
   "hosting": {
-    "public": ".",
+    "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**",
-      "scripts/**",
-      "src/**",
-      "server/**",
-      "content/**",
-      "build/**",
-      "dist-electron/**",
-      "electron-main.js",
-      "package*.json",
-      "yarn.lock",
-      "jsconfig.json",
-      "firestore.rules",
-      "firebase-migration.md",
-      "*.md"
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css)",
+        "source": "**/*.@(js|css|woff2|woff|ttf|eot)",
         "headers": [
           {
             "key": "Cache-Control",
