@@ -3,43 +3,49 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Shows: Public read, authenticated write
+    // Central allowlist — used by all protected collections
+    function isAllowedUser() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/allowedUsers/$(request.auth.uid));
+    }
+
+    // Each user can read their own allowedUsers doc (required for the sign-in check).
+    // Writes are console/Admin SDK only.
+    match /allowedUsers/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Shows: public read, allowlisted write
     match /shows/{showId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAllowedUser();
     }
 
-    // Songs: Public read, authenticated write
+    // Songs: public read, allowlisted write
     match /songs/{songId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAllowedUser();
     }
 
-    // Setlists: Public read, authenticated write
+    // Setlists: public read, allowlisted write
     match /setlists/{setlistId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAllowedUser();
     }
 
-    // Clients: Authenticated read/write only (contains contact info)
+    // Clients: allowlisted read/write only
     match /clients/{clientId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAllowedUser();
 
-      // Activity Logs sub-collection
       match /activityLogs/{logId} {
-        allow read, write: if request.auth != null;
+        allow read, write: if isAllowedUser();
       }
     }
 
-    // Quotes: Authenticated read/write only
+    // Quotes: allowlisted read/write only
     match /quotes/{quoteId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Admin users collection for role management
-    match /adminUsers/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if false; // Only settable via Admin SDK
+      allow read, write: if isAllowedUser();
     }
   }
 }
