@@ -42,10 +42,6 @@ export const config = {
       label: "Events",
       link: "index.html#shows",
     },
-    newsletter: {
-      label: "Email List",
-      link: "index.html#newsletter",
-    },
     mediaKit: {
       label: "Media",
       link: "media-kit.html",

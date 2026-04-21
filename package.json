@@ -17,16 +17,17 @@
   "scripts": {
     "start": "electron .",
     "start:electron": "electron .",
-    "build": "esbuild src/firebase-bundle.js --bundle --outfile=dist/firebase-bundle.js --format=iife --global-name=UltraphonicsFirebase --minify && esbuild src/main.js src/quote.js src/contact.js src/media-kit.js src/services.js src/weddings.js src/live-viewer.js --bundle --outdir=dist --format=iife --minify",
-    "build:dev": "esbuild src/firebase-bundle.js --bundle --outfile=dist/firebase-bundle.js --format=iife --global-name=UltraphonicsFirebase --sourcemap && esbuild src/main.js src/quote.js src/contact.js src/media-kit.js src/services.js src/weddings.js src/live-viewer.js --bundle --outdir=dist --format=iife --sourcemap",
+    "build": "vite build",
+    "dev": "vite",
+    "build:legacy": "esbuild src/firebase-bundle.js --bundle --outfile=dist/firebase-bundle.js --format=iife --global-name=UltraphonicsFirebase --minify && esbuild src/main.js src/quote.js src/contact.js src/media-kit.js src/services.js src/weddings.js src/live-viewer.js --bundle --outdir=dist --format=iife --minify",
+    "build:dev": "vite build --mode development",
     "build:icons": "bash scripts/prepare-icons.sh",
-    "package:mac": "yarn build && yarn build:icons && electron-builder --mac --publish never",
-    "build:electron:mac": "yarn build && yarn build:icons && electron-builder --mac",
-    "build:electron:win": "yarn build && yarn build:icons && electron-builder --win",
-    "build:electron:linux": "yarn build && yarn build:icons && electron-builder --linux",
-    "serve": "yarn build && firebase serve --only hosting",
-    "preview": "yarn build && firebase hosting:channel:deploy preview",
-    "deploy": "yarn build && firebase deploy --only hosting",
+    "package:mac": "yarn build:legacy && yarn build:icons && electron-builder --mac --publish never",
+    "build:electron:mac": "yarn build:legacy && yarn build:icons && electron-builder --mac",
+    "build:electron:win": "yarn build:legacy && yarn build:icons && electron-builder --win",
+    "build:electron:linux": "yarn build:legacy && yarn build:icons && electron-builder --linux",
+    "serve": "vite preview",
+    "deploy": "vite build && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "migrate": "node scripts/migrate-to-firestore.js",
     "kill-ports": "bash scripts/kill-ports.sh"
@@ -40,19 +41,27 @@
     "setlist"
   ],
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
     "firebase": "^12.8.0",
     "osc": "^2.4.5",
-    "ws": "^8.19.0",
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.0",
+    "sortablejs": "^1.15.7",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
     "esbuild": "^0.27.2",
     "firebase-admin": "^13.6.1",
     "firebase-tools": "^15.5.1",
-    "electron": "^28.1.0",
-    "electron-builder": "^24.9.1",
-    "concurrently": "^8.2.2"
+    "tailwindcss": "^4.2.2",
+    "vite": "^6.4.2"
   },
   "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610",
   "build": {
@@ -76,19 +85,28 @@
     "mac": {
       "category": "public.app-category.music",
       "icon": "build/icons/icon.icns",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "win": {
       "icon": "build/icons/icon.ico",
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
       "icon": "build/icons/icon.png",
       "category": "AudioVideo",
-      "target": ["AppImage", "deb"]
+      "target": [
+        "AppImage",
+        "deb"
+      ]
     }
   }
 }
