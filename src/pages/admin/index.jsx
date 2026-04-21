@@ -5,90 +5,48 @@ import SettingsModal from '../../components/admin/SettingsModal.jsx';
 import { useAuth } from '../../firebase/AuthContext.jsx';
 import { useSetlists, useSongs, useClients } from '../../firebase/useFirestore.js';
 
-// ─── Card components ────────────────────────────────────────────────────────
-
-function AppCard({ to, color, icon, title, subtitle }) {
-  return (
-    <Link
-      to={to}
-      className={`group flex items-center gap-3 px-4 py-3 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl hover:border-[${color}] transition-all duration-200`}
-    >
-      <div className={`shrink-0 p-2.5 rounded-lg bg-[${color}]/10 text-[${color}] group-hover:bg-[${color}]/20 transition-colors`}>
-        {icon}
+// ── App tile (large, colored accent) ────────────────────────────────────────
+function AppTile({ to, href, color, icon, title, subtitle }) {
+  const body = (
+    <div className="group relative flex flex-col gap-2.5 p-5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden hover:bg-[#1f1f1f] transition-all duration-200 h-full min-h-[118px]">
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
+      <div className="text-2xl mt-1" style={{ color }}>{icon}</div>
+      <div className="flex-1">
+        <div className="text-sm font-bold text-white leading-tight">{title}</div>
+        <div className="text-[#666] text-xs mt-0.5 leading-snug">{subtitle}</div>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-white">{title}</div>
-        <div className="text-[#888] text-xs">{subtitle}</div>
-      </div>
-      <i className="fas fa-arrow-right shrink-0 text-[#444] group-hover:text-white transition-colors text-xs" />
-    </Link>
+      <i className="fas fa-arrow-right absolute bottom-4 right-4 text-[#333] group-hover:text-[#555] transition-colors text-xs" />
+    </div>
   );
+  if (to)   return <Link to={to} className="block">{body}</Link>;
+  return <a href={href} target="_blank" rel="noopener noreferrer" className="block">{body}</a>;
 }
 
-function ExternalCard({ href, color, icon, title, subtitle }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`group flex items-center gap-3 px-4 py-3 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl hover:border-[${color}] transition-all duration-200`}
-    >
-      <div className={`shrink-0 p-2.5 rounded-lg bg-[${color}]/10 text-[${color}] group-hover:bg-[${color}]/20 transition-colors`}>
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-white">{title}</div>
-        <div className="text-[#888] text-xs truncate">{subtitle}</div>
-      </div>
-      <i className="fas fa-external-link-alt shrink-0 text-[#444] group-hover:text-white transition-colors text-xs" />
-    </a>
-  );
-}
-
-function LinkRow({ href, icon, label, external = true }) {
-  const cls = 'flex items-center gap-2 text-[#888] hover:text-[#00ddde] text-sm transition-colors py-1';
-  if (external) {
+// ── Small link row ───────────────────────────────────────────────────────────
+function LinkRow({ href, to, icon, label }) {
+  const cls = 'flex items-center gap-2.5 text-[#666] hover:text-[#00ddde] text-sm transition-colors py-1.5';
+  const ico = <i className={`${icon} text-xs w-4 text-center shrink-0`} />;
+  if (href) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
-        <i className={`fas ${icon} text-xs w-4 text-center`} />
-        {label}
-        <i className="fas fa-external-link-alt text-[10px] opacity-50" />
+        {ico}{label}
+        <i className="fas fa-external-link-alt text-[9px] opacity-40 ml-1" />
       </a>
     );
   }
-  return (
-    <Link to={href} className={cls}>
-      <i className={`fas ${icon} text-xs w-4 text-center`} />
-      {label}
-    </Link>
-  );
+  return <Link to={to} className={cls}>{ico}{label}</Link>;
 }
 
-function ToolLink({ href, icon, label }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2.5 px-3 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-[#888] hover:text-white hover:border-[#444] transition-all text-sm"
-    >
-      <i className={`${icon} text-sm w-4 text-center`} />
-      <span>{label}</span>
-    </a>
-  );
-}
-
-// ─── Dashboard ──────────────────────────────────────────────────────────────
-
+// ── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'performance', label: 'Performance', icon: 'fa-music' },
   { id: 'booking',     label: 'Booking',     icon: 'fa-address-book' },
   { id: 'tools',       label: 'Tools',       icon: 'fa-toolbox' },
-  { id: 'branding',    label: 'Branding',    icon: 'fa-palette' },
 ];
 
+// ── Dashboard ────────────────────────────────────────────────────────────────
 function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('performance');
+  const [activeTab, setActiveTab]   = useState('performance');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ablesetUrl, setAblesetUrl] = useState(
     localStorage.getItem('ableset_url') || 'http://192.168.1.243'
@@ -96,10 +54,10 @@ function AdminDashboard() {
   const { user } = useAuth();
 
   const { data: setlists = [] } = useSetlists();
-  const { data: songs = [] } = useSongs();
-  const { data: clients = [] } = useClients();
+  const { data: songs    = [] } = useSongs();
+  const { data: clients  = [] } = useClients();
 
-  const firstName = user?.displayName?.split(' ')[0] || null;
+  const firstName        = user?.displayName?.split(' ')[0] || null;
   const activeClientCount = clients.filter(c => c.status === 'Active').length;
 
   function handleSettingsClose() {
@@ -108,13 +66,20 @@ function AdminDashboard() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#121212] text-white overflow-hidden">
+    <div className="h-screen flex flex-col text-white overflow-hidden">
+      {/* Ambient orbs — same as public pages */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none', overflow: 'hidden' }} aria-hidden="true">
+        <div className="hero-orb hero-orb-1" />
+        <div className="hero-orb hero-orb-2" />
+        <div className="hero-orb hero-orb-3" />
+      </div>
+
       {/* Navbar */}
       <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a]">
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-3">
-              <img src="/assets/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-8 w-8" />
+              <img src="/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-8 w-8" />
               <span className="font-bold text-lg text-white">
                 {firstName ? `Hey, ${firstName}!` : 'Admin'}
               </span>
@@ -147,9 +112,9 @@ function AdminDashboard() {
       </nav>
 
       {/* Tab bar */}
-      <div className="shrink-0 bg-[#1a1a1a]/50 border-b border-[#2a2a2a]">
+      <div className="shrink-0 bg-[#121212]/60 border-b border-[#2a2a2a]">
         <div className="max-w-5xl mx-auto px-4">
-          <div className="flex gap-0 overflow-x-auto">
+          <div className="flex overflow-x-auto">
             {TABS.map(({ id, label, icon }) => (
               <button
                 key={id}
@@ -169,50 +134,50 @@ function AdminDashboard() {
 
       {/* Tab content */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-4 pt-5 pb-8">
+        <div className="max-w-5xl mx-auto px-4 pt-6 pb-8">
 
+          {/* ── Performance ──────────────────────────────────────────────── */}
           {activeTab === 'performance' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                <AppCard
-                  to="/setlists"
-                  color="#3b82f6"
-                  icon={<i className="fas fa-list text-base" />}
-                  title="Setlists"
-                  subtitle={`${setlists.length} saved setlist${setlists.length !== 1 ? 's' : ''}`}
-                />
-                <AppCard
-                  to="/songs"
-                  color="#22c55e"
-                  icon={<i className="fas fa-music text-base" />}
-                  title="Songs"
-                  subtitle={`${songs.filter(s => s.active !== false).length} songs in library`}
-                />
-                <ExternalCard
-                  href={ablesetUrl}
-                  color="#f43f5e"
-                  icon={<i className="fas fa-circle-play text-base" />}
-                  title="AbleSet"
-                  subtitle={ablesetUrl}
-                />
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <AppTile
+                to="/setlists"
+                color="#3b82f6"
+                icon={<i className="fas fa-list" />}
+                title="Setlists"
+                subtitle={`${setlists.length} saved setlist${setlists.length !== 1 ? 's' : ''}`}
+              />
+              <AppTile
+                to="/songs"
+                color="#22c55e"
+                icon={<i className="fas fa-music" />}
+                title="Songs"
+                subtitle={`${songs.filter(s => s.active !== false).length} songs in library`}
+              />
+              <AppTile
+                href={ablesetUrl}
+                color="#f43f5e"
+                icon={<i className="fas fa-circle-play" />}
+                title="AbleSet"
+                subtitle={ablesetUrl}
+              />
             </div>
           )}
 
+          {/* ── Booking ───────────────────────────────────────────────────── */}
           {activeTab === 'booking' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <AppCard
+              <div className="grid grid-cols-2 gap-3">
+                <AppTile
                   to="/clients"
                   color="#06b6d4"
-                  icon={<i className="fas fa-address-book text-base" />}
+                  icon={<i className="fas fa-address-book" />}
                   title="Client Manager"
                   subtitle={`${activeClientCount} active client${activeClientCount !== 1 ? 's' : ''}`}
                 />
-                <AppCard
+                <AppTile
                   to="/clients?mode=shows"
-                  color="#a78bfa"
-                  icon={<i className="fas fa-calendar-days text-base" />}
+                  color="#14b8a6"
+                  icon={<i className="fas fa-calendar-days" />}
                   title="Shows"
                   subtitle="Manage upcoming & past shows"
                 />
@@ -220,41 +185,69 @@ function AdminDashboard() {
 
               <div className="border-t border-[#2a2a2a] pt-4 space-y-0.5">
                 <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-2">Reference Materials</p>
-                <LinkRow href="https://docs.google.com/spreadsheets/d/1csJb56jnisEb_37pYMVTOY6kSt6J-HqN5X7IYYRgH20/edit?usp=sharing" icon="fa-table" label="Ultrasheet" />
-                <LinkRow href="https://drive.google.com/drive/u/0/folders/1OySLOkCsj3OjSc-RhlZmlAPYN9J-yInD" icon="fa-heart" label="Weddings Flyer" />
-                <LinkRow href="https://drive.google.com/drive/u/0/folders/1ZITYFWoKwoxLbY6j_ejq-Cgxg8unlMk4" icon="fa-dollar-sign" label="Event Pricing" />
+                <LinkRow href="https://docs.google.com/spreadsheets/d/1csJb56jnisEb_37pYMVTOY6kSt6J-HqN5X7IYYRgH20/edit?usp=sharing" icon="fas fa-table" label="Ultrasheet" />
+                <LinkRow href="https://drive.google.com/drive/u/0/folders/1OySLOkCsj3OjSc-RhlZmlAPYN9J-yInD" icon="fas fa-heart" label="Weddings Flyer" />
+                <LinkRow href="https://drive.google.com/drive/u/0/folders/1ZITYFWoKwoxLbY6j_ejq-Cgxg8unlMk4" icon="fas fa-dollar-sign" label="Event Pricing" />
               </div>
             </div>
           )}
 
+          {/* ── Tools ────────────────────────────────────────────────────── */}
           {activeTab === 'tools' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-              <ToolLink href="https://github.com/tdhckmn/ultraphonics" icon="fab fa-github" label="GitHub" />
-              <ToolLink href="https://console.firebase.google.com/project/ultraphonics-web/overview" icon="fas fa-fire" label="Firebase" />
-              <ToolLink href="https://analytics.google.com/analytics/web/#/a359545509p494449748/reports/intelligenthome" icon="fas fa-chart-line" label="Analytics" />
-              <ToolLink href="https://search.google.com/search-console" icon="fab fa-google" label="Search Console" />
-              <ToolLink href="https://dashboard.emailjs.com/admin" icon="fas fa-paper-plane" label="EmailJS" />
-              <ToolLink href="https://dashboard.mailerlite.com/" icon="fas fa-envelope" label="MailerLite" />
-              <ToolLink href="https://discord.com/channels/1450501228462215208" icon="fab fa-discord" label="Discord" />
-            </div>
-          )}
-
-          {activeTab === 'branding' && (
             <div className="space-y-6">
-              <div className="space-y-1">
-                <LinkRow href="/branding-guide" icon="fa-palette" label="Brand Guide" external={false} />
-                <LinkRow href="/branding-dev-reference" icon="fa-code" label="Developer Reference" external={false} />
-                <LinkRow href="/branding-ai-prompt" icon="fa-robot" label="AI Branding Prompt" external={false} />
+              {/* App tiles */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <AppTile
+                  href="https://github.com/tdhckmn/ultraphonics"
+                  color="#6b7280"
+                  icon={<i className="fab fa-github" />}
+                  title="GitHub"
+                  subtitle="Source & releases"
+                />
+                <AppTile
+                  href="https://console.firebase.google.com/project/ultraphonics-web/overview"
+                  color="#f59e0b"
+                  icon={<i className="fas fa-fire" />}
+                  title="Firebase"
+                  subtitle="Firestore & hosting"
+                />
+                <AppTile
+                  href="https://analytics.google.com/analytics/web/#/a359545509p494449748/reports/intelligenthome"
+                  color="#f97316"
+                  icon={<i className="fas fa-chart-line" />}
+                  title="Analytics"
+                  subtitle="Traffic & engagement"
+                />
+                <AppTile
+                  href="https://search.google.com/search-console"
+                  color="#3b82f6"
+                  icon={<i className="fab fa-google" />}
+                  title="Search Console"
+                  subtitle="SEO & indexing"
+                />
+              </div>
+
+              {/* Link rows */}
+              <div className="border-t border-[#2a2a2a] pt-4 space-y-0.5">
+                <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-2">Services</p>
+                <LinkRow href="https://studio.firebase.google.com/project/ultraphonics-web" icon="fas fa-wand-magic-sparkles" label="Firebase Studio" />
+                <LinkRow href="https://dashboard.emailjs.com/admin" icon="fas fa-paper-plane" label="EmailJS" />
+                <LinkRow href="https://dashboard.mailerlite.com/" icon="fas fa-envelope" label="MailerLite" />
+                <LinkRow href="https://discord.com/channels/1450501228462215208" icon="fab fa-discord" label="Discord" />
+              </div>
+
+              <div className="border-t border-[#2a2a2a] pt-4 space-y-0.5">
+                <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-2">Branding</p>
+                <LinkRow to="/branding-guide" icon="fas fa-palette" label="Brand Guide" />
+                <LinkRow to="/branding-dev-reference" icon="fas fa-code" label="Developer Reference" />
+                <LinkRow to="/branding-ai-prompt" icon="fas fa-robot" label="AI Branding Prompt" />
               </div>
 
               <div className="border-t border-[#2a2a2a] pt-4">
-                <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-3">Site Management</p>
                 <button
                   onClick={() => {
                     if ('serviceWorker' in navigator) {
-                      navigator.serviceWorker.getRegistrations().then(regs => {
-                        regs.forEach(r => r.unregister());
-                      });
+                      navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
                     }
                     window.location.reload(true);
                   }}
@@ -270,10 +263,10 @@ function AdminDashboard() {
       </main>
 
       {/* Footer */}
-      <footer className="shrink-0 h-9 flex items-center border-t border-[#2a2a2a]">
+      <footer className="shrink-0 h-9 flex items-center border-t border-[#2a2a2a] bg-[#121212]/60">
         <div className="max-w-5xl w-full mx-auto px-4 flex justify-between items-center">
           <p className="text-[#444] text-xs">Ultraphonics Admin Portal</p>
-          <p className="text-[#333] text-xs">v4.0</p>
+          <p className="text-[#333] text-xs">v5.0</p>
         </div>
       </footer>
 

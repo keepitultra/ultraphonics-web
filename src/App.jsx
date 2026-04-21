@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Navigation from './components/Navigation.jsx';
 import Footer from './components/Footer.jsx';
 import ScrollToTop from './components/ScrollToTop.jsx';
+import { AdminDrawerProvider } from './components/admin/AdminShell.jsx';
 
 // Public pages
 import Home from './pages/Home.jsx';
@@ -47,9 +48,9 @@ function PublicLayout() {
         <Route path="/media-kit" element={<MediaKit />} />
         <Route path="/live" element={<LiveViewer />} />
         <Route path="/admin/*" element={<AdminRouter />} />
-        <Route path="/setlists" element={<SetlistManager />} />
-        <Route path="/songs" element={<SongManager />} />
-        <Route path="/clients" element={<ClientManager />} />
+        <Route path="/setlists" element={<AdminDrawerProvider><SetlistManager /></AdminDrawerProvider>} />
+        <Route path="/songs" element={<AdminDrawerProvider><SongManager /></AdminDrawerProvider>} />
+        <Route path="/clients" element={<AdminDrawerProvider><ClientManager /></AdminDrawerProvider>} />
       </Routes>
       {!hideChrome && <Footer />}
     </>

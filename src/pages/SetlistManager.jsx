@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import Sortable from 'sortablejs';
-import AdminShell from '../components/admin/AdminShell.jsx';
+import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
 import { useSetlists, useSongs } from '../firebase/useFirestore.js';
 import { saveSetlist, deleteSetlist, updateSong } from '../firestore-service.js';
@@ -48,6 +48,7 @@ function generateStats(songs) {
 export default function SetlistManager() {
   const { user } = useAuth();
   const { data: setlists = [] } = useSetlists();
+  const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { data: allSongs = [] } = useSongs();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -119,7 +120,8 @@ export default function SetlistManager() {
   // Setlist sortable — always init when setlistRef mounts
   useEffect(() => {
     if (!setlistRef.current) return;
-    setlistSortable.current?.destroy();
+    if (setlistSortable.current?.el) setlistSortable.current.destroy();
+    setlistSortable.current = null;
     setlistSortable.current = Sortable.create(setlistRef.current, {
       group: 'songs',
       animation: 150,
@@ -153,13 +155,14 @@ export default function SetlistManager() {
         setIsDirty(true);
       },
     });
-    return () => { setlistSortable.current?.destroy(); };
+    return () => { if (setlistSortable.current?.el) setlistSortable.current.destroy(); setlistSortable.current = null; };
   }, [viewMode]);
 
   // Library sortable — only init when library tab is mounted
   useEffect(() => {
     if (!libraryRef.current) return;
-    librarySortable.current?.destroy();
+    if (librarySortable.current?.el) librarySortable.current.destroy();
+    librarySortable.current = null;
     librarySortable.current = Sortable.create(libraryRef.current, {
       group: { name: 'songs', pull: 'clone', put: false },
       sort: false,
@@ -167,7 +170,7 @@ export default function SetlistManager() {
       delayOnTouchOnly: true,
       animation: 0,
     });
-    return () => { librarySortable.current?.destroy(); };
+    return () => { if (librarySortable.current?.el) librarySortable.current.destroy(); librarySortable.current = null; };
   }, [leftTab]);
 
   // Update sortable disabled state when viewMode changes
@@ -258,7 +261,7 @@ export default function SetlistManager() {
 
   // ── Left panel ────────────────────────────────────────────────────────
   const leftPanel = (
-    <div className="flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]">
+    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}>
       {/* Sub-tabs */}
       <div className="shrink-0 flex border-b border-[#2a2a2a]">
         {['setlists', 'library'].map(tab => (
@@ -294,6 +297,7 @@ export default function SetlistManager() {
                   onClick={() => {
                     if (isDirty && selectedId !== sl.id && !window.confirm('Load different setlist? Unsaved changes will be lost.')) return;
                     setSearchParams({ id: sl.id }, { replace: false });
+                    closeDrawer();
                   }}
                   className={`w-full text-left px-4 py-3 border-b border-[#2a2a2a] transition-colors ${
                     isActive
@@ -606,7 +610,7 @@ export default function SetlistManager() {
   return (
     <AdminShell activeApp="setlists">
       {/* Desktop two-column */}
-      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: '350px 1fr' }}>
+      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
         {leftPanel}
         {rightPanel}
       </div>

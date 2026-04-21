@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import AdminShell from '../components/admin/AdminShell.jsx';
+import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
 import { useSongs } from '../firebase/useFirestore.js';
 import { getSongs, saveSong, deleteSong, syncSongsBatch } from '../firestore-service.js';
@@ -106,6 +106,7 @@ function Badge({ children, color = '#888' }) {
 export default function SongManager() {
   const { user } = useAuth();
   const { data: songs = [] } = useSongs();
+  const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -161,6 +162,7 @@ export default function SongManager() {
     setIsDirty(false);
     setMode('view');
     setSearchParams({ id }, { replace: false });
+    closeDrawer();
   }
 
   // ── Enter edit ────────────────────────────────────────────────────────
@@ -303,7 +305,7 @@ export default function SongManager() {
   // ── Left panel ────────────────────────────────────────────────────────
   const leftPanel = (
     <div
-      className="flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] relative"
+      className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] relative${drawerOpen ? ' drawer-open' : ''}`}
       onDragEnter={handleDragEnter}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
       onDragLeave={handleDragLeave}
@@ -535,7 +537,7 @@ export default function SongManager() {
   return (
     <AdminShell activeApp="songs">
       {/* Two-column layout */}
-      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: '320px 1fr' }}>
+      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
         {leftPanel}
         <div className="flex flex-col overflow-hidden bg-[#121212]">
           {rightPanel}
