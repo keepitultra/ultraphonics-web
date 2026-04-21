@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
-import AdminShell from '../components/admin/AdminShell.jsx';
+import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
 import { useClients, useSetlists, useShows } from '../firebase/useFirestore.js';
 import {
@@ -80,6 +80,7 @@ export default function ClientManagerPage() {
 
 function ClientManager() {
   const { user } = useAuth();
+  const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { data: clients = [] } = useClients();
   const { data: allShows = [] } = useShows();
   const { data: setlists = [] } = useSetlists();
@@ -139,11 +140,13 @@ function ClientManager() {
   function selectClient(id) {
     setSearchParams({ client: id }, { replace: false });
     setClientDetailTab('profile');
+    closeDrawer();
   }
 
   function selectShow(id) {
     setSearchParams({ mode: 'shows', show: id }, { replace: false });
     setShowEditMode(false);
+    closeDrawer();
   }
 
   function setMode(m) {
@@ -368,7 +371,7 @@ function ClientManager() {
 
   // ── Left panel ──────────────────────────────────────────────────────────
   const leftPanel = (
-    <div className="flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]">
+    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}>
       {/* Mode toggle */}
       <div className="shrink-0 flex border-b border-[#2a2a2a]">
         {['clients', 'shows'].map(m => (
@@ -654,7 +657,7 @@ function ClientManager() {
 
   return (
     <AdminShell activeApp="clients">
-      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: '320px 1fr' }}>
+      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
         {leftPanel}
         {rightPanel}
       </div>
