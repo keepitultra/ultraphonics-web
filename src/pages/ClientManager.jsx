@@ -55,9 +55,25 @@ function PersonnelBubble({ name }) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
+  // ISO date-only strings (YYYY-MM-DD) must be parsed without a Date object
+  // to avoid UTC→local shift (new Date("2024-10-10") = UTC midnight = Oct 9 in US timezones)
+  const iso = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(iso[2]) - 1]} ${parseInt(iso[3])}, ${iso[1]}`;
+  }
+  // Legacy US-format dates ("M/D/YYYY") parse as local time — safe to use directly
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function extractYear(dateStr) {
+  if (!dateStr) return null;
+  const iso = dateStr.match(/^(\d{4})-/);
+  if (iso) return iso[1];
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : String(d.getFullYear());
 }
 
 function formatCurrency(n) {
@@ -170,14 +186,11 @@ function ClientManager() {
     });
 
   // ── Show filtering ─────────────────────────────────────────────────────
-  const showYears = [...new Set(allShows.map(s => {
-    const d = new Date(s.date);
-    return isNaN(d.getTime()) ? null : String(d.getFullYear());
-  }).filter(Boolean))].sort((a, b) => Number(b) - Number(a));
+  const showYears = [...new Set(allShows.map(s => extractYear(s.date)).filter(Boolean))].sort((a, b) => Number(b) - Number(a));
 
   const filteredShows = allShows
     .filter(s => {
-      const yr = (() => { const d = new Date(s.date); return isNaN(d.getTime()) ? '' : String(d.getFullYear()); })();
+      const yr = extractYear(s.date) || '';
       if (showYear && yr !== showYear) return false;
       const text = `${s.venue || ''} ${s.city || ''} ${s.state || ''}`.toLowerCase();
       return text.includes(showSearch.toLowerCase());
@@ -309,13 +322,13 @@ function ClientManager() {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return '';
       const match = timeStr?.match(/(\d+):(\d+)\s*(am|pm)?/i);
-      if (!match) return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+      if (!match) return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}`;
       let h = parseInt(match[1]);
       const m = parseInt(match[2]);
       const ampm = match[3]?.toLowerCase();
       if (ampm === 'pm' && h !== 12) h += 12;
       if (ampm === 'am' && h === 12) h = 0;
-      return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+      return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(h)}${pad(m)}00`;
     }
     const start = toGcalDate(show.date, show.startTime);
     const end = toGcalDate(show.date, show.endTime) || start;
@@ -341,13 +354,13 @@ function ClientManager() {
       if (isNaN(d.getTime())) return '';
       const match = timeStr?.match(/(\d+):(\d+)\s*(am|pm)?/i);
       function pad(n) { return String(n).padStart(2, '0'); }
-      if (!match) return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+      if (!match) return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}`;
       let h = parseInt(match[1]);
       const m = parseInt(match[2]);
       const ampm = match[3]?.toLowerCase();
       if (ampm === 'pm' && h !== 12) h += 12;
       if (ampm === 'am' && h === 12) h = 0;
-      return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+      return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(h)}${pad(m)}00`;
     }
     const start = toIcsDate(show.date, show.startTime);
     const end = toIcsDate(show.date, show.endTime) || start;
@@ -645,6 +658,7 @@ function ClientManager() {
           <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
             <ShowDetail show={selectedShow} clients={clients} setlists={setlists} />
           </div>
+
         </div>
       )}
 

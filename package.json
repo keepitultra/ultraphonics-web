@@ -28,6 +28,7 @@
     "build:electron:linux": "yarn build:legacy && yarn build:icons && electron-builder --linux",
     "serve": "vite preview",
     "deploy": "vite build && firebase deploy --only hosting",
+    "preview": "vite build && firebase hosting:channel:deploy preview --expires 7d",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "migrate": "node scripts/migrate-to-firestore.js",
     "kill-ports": "bash scripts/kill-ports.sh"
