@@ -102,6 +102,31 @@ function Badge({ children, color = '#888' }) {
   );
 }
 
+// ── Song row ──────────────────────────────────────────────────────────────
+function SongRow({ song, isActive, onSelect }) {
+  const isArch = song.active === false;
+  return (
+    <button
+      onClick={() => onSelect(song.id)}
+      className={`w-full text-left px-4 py-2.5 border-b border-[#2a2a2a] transition-colors flex items-center gap-3 ${
+        isActive ? 'bg-[#22c55e]/10 border-l-2 border-l-[#22c55e]' : 'hover:bg-white/5'
+      } ${isArch ? 'opacity-40' : ''}`}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-white truncate">{song.title || song.name}</div>
+        {song.artist && <div className="text-xs text-[#888] truncate">{song.artist}</div>}
+      </div>
+      <div className="shrink-0 flex items-center gap-1 flex-wrap justify-end">
+        {isArch && <Badge color="#ef4444">Arch</Badge>}
+        {song.eflat && <Badge color="#a78bfa">Eb</Badge>}
+        {song.dropD && <Badge color="#818cf8">Drop</Badge>}
+        {song.capo > 0 && <Badge color="#f59e0b">Capo {song.capo}</Badge>}
+        {song.key && <Badge color="#22c55e">{song.key}</Badge>}
+      </div>
+    </button>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────
 export default function SongManager() {
   const { user } = useAuth();
@@ -119,6 +144,7 @@ export default function SongManager() {
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [songSort, setSongSort] = useState(() => localStorage.getItem('song_sort') || 'genre');
   const [accordion, setAccordion] = useState(() => {
     try { return JSON.parse(localStorage.getItem('song_accordion') || '{}'); } catch { return {}; }
   });
@@ -321,7 +347,8 @@ export default function SongManager() {
       )}
 
       {/* Search + add */}
-      <div className="shrink-0 p-3 border-b border-[#2a2a2a] flex gap-2">
+      <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
+      <div className="flex gap-2">
         <div className="relative flex-1">
           <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
           <input
@@ -352,6 +379,15 @@ export default function SongManager() {
           </button>
         )}
       </div>
+      <select
+        value={songSort}
+        onChange={e => { setSongSort(e.target.value); localStorage.setItem('song_sort', e.target.value); }}
+        className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#22c55e]"
+      >
+        <option value="genre">Sort by Genre</option>
+        <option value="alpha">Sort Alphabetically</option>
+      </select>
+      </div>
 
       {/* AbleSet import trigger */}
       {showImportTrigger && user && (
@@ -366,9 +402,17 @@ export default function SongManager() {
         </div>
       )}
 
-      {/* Song accordion list */}
+      {/* Song list */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {GENRE_ORDER.map(genre => {
+        {filtered.length === 0 && (
+          <div className="p-10 text-center text-[#555]">
+            <i className="fas fa-search text-2xl mb-3 block opacity-30" />
+            <p className="text-sm">No songs found</p>
+          </div>
+        )}
+
+        {/* Genre view */}
+        {songSort === 'genre' && GENRE_ORDER.map(genre => {
           const genreSongs = groups[genre];
           if (!genreSongs.length) return null;
           const isOpen = isSearching || (accordion[genre] !== false);
@@ -384,42 +428,15 @@ export default function SongManager() {
                   <i className={`fas fa-chevron-right text-[10px] text-[#555] transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />
                 </div>
               </button>
-              {isOpen && genreSongs.map(song => {
-                const isActive = selectedId === song.id;
-                const isArch = song.active === false;
-                return (
-                  <button
-                    key={song.id}
-                    onClick={() => selectSong(song.id)}
-                    className={`w-full text-left px-4 py-2.5 border-b border-[#2a2a2a] transition-colors flex items-center gap-3 ${
-                      isActive
-                        ? 'bg-[#22c55e]/10 border-l-2 border-l-[#22c55e]'
-                        : 'hover:bg-white/5'
-                    } ${isArch ? 'opacity-40' : ''}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-white truncate">{song.title || song.name}</div>
-                      {song.artist && <div className="text-xs text-[#888] truncate">{song.artist}</div>}
-                    </div>
-                    <div className="shrink-0 flex items-center gap-1 flex-wrap justify-end">
-                      {isArch && <Badge color="#ef4444">Arch</Badge>}
-                      {song.eflat && <Badge color="#a78bfa">Eb</Badge>}
-                      {song.dropD && <Badge color="#818cf8">Drop</Badge>}
-                      {song.capo > 0 && <Badge color="#f59e0b">Capo {song.capo}</Badge>}
-                      {song.key && <Badge color="#22c55e">{song.key}</Badge>}
-                    </div>
-                  </button>
-                );
-              })}
+              {isOpen && genreSongs.map(song => <SongRow key={song.id} song={song} isActive={selectedId === song.id} onSelect={selectSong} />)}
             </div>
           );
         })}
-        {filtered.length === 0 && (
-          <div className="p-10 text-center text-[#555]">
-            <i className="fas fa-search text-2xl mb-3 block opacity-30" />
-            <p className="text-sm">No songs found</p>
-          </div>
-        )}
+
+        {/* Alphabetical view */}
+        {songSort === 'alpha' && filtered.map(song => (
+          <SongRow key={song.id} song={song} isActive={selectedId === song.id} onSelect={selectSong} />
+        ))}
       </div>
 
       {/* Footer count */}
