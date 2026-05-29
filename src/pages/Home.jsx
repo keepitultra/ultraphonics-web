@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { usePublishedShows } from '../firebase/useFirestore.js';
 import { trackEvent } from '../analytics.js';
 import { config } from '../config.js';
@@ -22,6 +22,17 @@ export default function Home() {
   const [tipOpen, setTipOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const logoClicksRef = useRef([]);
+
+  function handleLogoClick() {
+    const now = Date.now();
+    logoClicksRef.current = [...logoClicksRef.current, now].filter(t => now - t < 10000);
+    if (logoClicksRef.current.length >= 20) {
+      logoClicksRef.current = [];
+      navigate('/admin');
+    }
+  }
 
   // Auto-open request modal for campaign URLs
   useEffect(() => {
@@ -239,7 +250,7 @@ export default function Home() {
           <source src="/videos/hero-mobile-brightside.mp4" type="video/mp4" />
         </video>
         <div className="hero-content">
-          <img src="/images/logo-color.png" alt="Ultraphonics Logo" className="logo" />
+          <img src="/images/logo-color.png" alt="Ultraphonics Logo" className="logo" onClick={handleLogoClick} style={{ cursor: 'default' }} />
           <h1 className="band-name">Ultraphonics</h1>
           <h2 className="tagline">High-Energy Live Band for Events, Weddings &amp; Bars</h2>
           <h3 className="genres">Rock • Pop • Country • Soul</h3>

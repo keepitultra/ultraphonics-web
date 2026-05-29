@@ -270,6 +270,7 @@ function ShowManager() {
   }, {});
   const showGroupKeys = Object.keys(showGroups).sort((a, b) => showSortDir === 'desc' ? b.localeCompare(a) : a.localeCompare(b));
   const isSearching = showSearch.trim().length > 0;
+  const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   function selectShow(id) {
@@ -400,7 +401,8 @@ function ShowManager() {
         )}
         {showGroupKeys.map(key => {
           const { label, shows } = showGroups[key];
-          const isOpen = isSearching || (monthAccordion[key] !== false);
+          const defaultOpen = key >= currentMonthKey;
+          const isOpen = isSearching || (key in monthAccordion ? monthAccordion[key] !== false : defaultOpen);
           return (
             <div key={key}>
               <button
@@ -559,7 +561,10 @@ function ShowManager() {
                   </button>
                 )}
               </div>
-              <ShowDetail show={selectedShow} clients={clients} setlists={setlists} memberProfiles={memberProfiles} />
+              <ShowDetail show={selectedShow} clients={clients} setlists={setlists} memberProfiles={memberProfiles} onPublish={async () => {
+                if (!window.confirm('Publish this event on the website?')) return;
+                await saveShow({ ...selectedShow, published: true, updatedAt: new Date().toISOString() });
+              }} />
             </div>
           </div>
         </div>
@@ -595,7 +600,7 @@ function EmptyState({ icon, message }) {
 }
 
 // ── Show Detail ────────────────────────────────────────────────────────────
-function ShowDetail({ show, clients, setlists, memberProfiles = {} }) {
+function ShowDetail({ show, clients, setlists, memberProfiles = {}, onPublish }) {
   const client = clients.find(c => c.id === show.clientId);
   const setlist = setlists.find(s => s.id === show.setlistId);
 
@@ -603,7 +608,10 @@ function ShowDetail({ show, clients, setlists, memberProfiles = {} }) {
     <div className="space-y-4 max-w-xl">
       <div className="flex items-center gap-2 flex-wrap">
         {show.isPrivate && <Badge>Private</Badge>}
-        {show.published && <Badge color="#22c55e">Published</Badge>}
+        {show.published
+          ? <Badge color="#22c55e">Published</Badge>
+          : <button onClick={onPublish} title="Publish this event on the website"><Badge color="#f59e0b">Unpublished</Badge></button>
+        }
       </div>
 
       <Card title="Date & Time">
@@ -680,6 +688,31 @@ function ShowDetail({ show, clients, setlists, memberProfiles = {} }) {
 
 const GUEST_INSTRUMENTS = ['Guitar', 'Bass', 'Drums', 'Vocals', 'Keyboards', 'Other'];
 
+// Convert stored time strings (any format) → "HH:MM" for <input type="time">
+function toTimeInputValue(str) {
+  if (!str) return '';
+  const match = str.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!match) return '';
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  const ampm = match[4]?.toLowerCase();
+  if (ampm === 'pm' && h !== 12) h += 12;
+  if (ampm === 'am' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${m}`;
+}
+
+// Convert "HH:MM" from <input type="time"> → "H:MM AM/PM" for storage
+function fromTimeInputValue(val) {
+  if (!val) return '';
+  const [hStr, mStr] = val.split(':');
+  let h = parseInt(hStr, 10);
+  const m = mStr;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+}
+
 // ── Show Edit Form ─────────────────────────────────────────────────────────
 function ShowEditForm({ form, setField, setFields, clients, setlists, onClientChange, memberProfiles = {} }) {
   const [guestName, setGuestName] = useState('');
@@ -734,12 +767,15 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
       </div>
       <div className="grid grid-cols-2 gap-4">
         <FormField label="Start Time">
-          <input type="text" value={form.startTime || ''} onChange={e => setField('startTime', e.target.value)} className={INPUT} placeholder="8:00 PM" />
+          <input type="time" value={toTimeInputValue(form.startTime)} onChange={e => setField('startTime', fromTimeInputValue(e.target.value))} className={INPUT} />
         </FormField>
         <FormField label="End Time">
-          <input type="text" value={form.endTime || ''} onChange={e => setField('endTime', e.target.value)} className={INPUT} placeholder="11:00 PM" />
+          <input type="time" value={toTimeInputValue(form.endTime)} onChange={e => setField('endTime', fromTimeInputValue(e.target.value))} className={INPUT} />
         </FormField>
       </div>
+      <FormField label="Public Description">
+        <textarea rows={3} value={form.description || ''} onChange={e => setField('description', e.target.value)} className={INPUT + ' resize-y'} placeholder="Shown on the public event page…" />
+      </FormField>
       <FormField label="Event Link">
         <input type="url" value={form.eventLink || ''} onChange={e => setField('eventLink', e.target.value)} className={INPUT} placeholder="https://..." />
       </FormField>
