@@ -1,0 +1,152 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Web deploy ─────────────────────────────────────────────────────────────
+  deploy-web:
+    name: Deploy Web (Firebase Hosting)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Deploy to Firebase Hosting
+        run: yarn deploy
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+  # ── Electron builds (parallel) ─────────────────────────────────────────────
+  build-electron-mac:
+    name: Build Electron (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install ImageMagick
+        run: brew install imagemagick
+
+      - name: Build Electron (macOS)
+        run: yarn build:electron:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-mac
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          if-no-files-found: warn
+
+  build-electron-win:
+    name: Build Electron (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Electron (Windows)
+        run: yarn build:electron:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-win
+          path: |
+            dist-electron/*.exe
+            dist-electron/*.msi
+          if-no-files-found: warn
+
+  build-electron-linux:
+    name: Build Electron (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Electron (Linux)
+        run: yarn build:electron:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-linux
+          path: |
+            dist-electron/*.AppImage
+            dist-electron/*.deb
+          if-no-files-found: warn
+
+  # ── GitHub Release ──────────────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [build-electron-mac, build-electron-win, build-electron-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}-${{ github.run_number }}
+          name: v${{ steps.pkg.outputs.version }} (build ${{ github.run_number }})
+          body: |
+            Automated release from merge to `main`.
+
+            **Commit:** ${{ github.sha }}
+            **Run:** ${{ github.run_number }}
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
