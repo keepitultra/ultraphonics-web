@@ -1,20 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
+import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
-import { useClients, useSetlists, useShows } from '../firebase/useFirestore.js';
+import { useClients } from '../firebase/useFirestore.js';
 import {
   saveClient, deleteClient, getClientShows, getClientDetails,
-  saveShow, deleteShow, addActivityLog, subscribeToActivityLogs,
+  addActivityLog, subscribeToActivityLogs,
 } from '../firestore-service.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const PERSONNEL = ['Anthony', 'Tom', 'Lester', 'David', 'Shelley', 'Kelsey'];
-const PERSONNEL_COLORS = {
-  Anthony: '#f59e0b', Tom: '#22c55e', Lester: '#a78bfa',
-  David: '#e879f9', Shelley: '#fb923c', Kelsey: '#38bdf8',
-};
 const STATUS_COLORS = {
   Lead: { bg: '#ca8a04', text: '#fef08a', border: '#a16207' },
   Active: { bg: '#16a34a', text: '#bbf7d0', border: '#15803d' },
@@ -40,19 +36,6 @@ function StatusBadge({ status }) {
   );
 }
 
-function PersonnelBubble({ name }) {
-  const color = PERSONNEL_COLORS[name] || '#888';
-  return (
-    <span
-      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-      style={{ background: `${color}25`, color, border: `1px solid ${color}50` }}
-      title={name}
-    >
-      {name[0]}
-    </span>
-  );
-}
-
 function formatDate(dateStr) {
   if (!dateStr) return '';
   // ISO date-only strings (YYYY-MM-DD) must be parsed without a Date object
@@ -66,14 +49,6 @@ function formatDate(dateStr) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function extractYear(dateStr) {
-  if (!dateStr) return null;
-  const iso = dateStr.match(/^(\d{4})-/);
-  if (iso) return iso[1];
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : String(d.getFullYear());
 }
 
 function formatCurrency(n) {
@@ -96,24 +71,18 @@ export default function ClientManagerPage() {
 
 function ClientManager() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { data: clients = [] } = useClients();
-  const { data: allShows = [] } = useShows();
-  const { data: setlists = [] } = useSetlists();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const mode = searchParams.get('mode') || 'clients'; // clients | shows
   const selectedClientId = searchParams.get('client') || null;
-  const selectedShowId = searchParams.get('show') || null;
 
   // Left panel filters
   const [clientSearch, setClientSearch] = useState('');
-  const [clientStatusFilter, setClientStatusFilter] = useState('All');
+  const [clientStatusFilter, setClientStatusFilter] = useState(() => localStorage.getItem('cm_clientStatus') ?? 'Active');
   const [clientTypeFilter, setClientTypeFilter] = useState('All');
   const [clientSort, setClientSort] = useState('Name A-Z');
-  const [showSearch, setShowSearch] = useState('');
-  const [showYear, setShowYear] = useState(String(new Date().getFullYear()));
-  const [showSortDir, setShowSortDir] = useState('desc');
 
   // Right panel state
   const [clientDetailTab, setClientDetailTab] = useState('profile');
@@ -126,20 +95,14 @@ function ClientManager() {
   // Modals / forms
   const [clientFormOpen, setClientFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
-  const [showEditMode, setShowEditMode] = useState(false);
-  const [showForm, setShowForm] = useState(/** @type {any} */ (null));
-  const [showDirty, setShowDirty] = useState(false);
-  const [savingShow, setSavingShow] = useState(false);
-  const [calendarDropdown, setCalendarDropdown] = useState(false);
 
   const selectedClient = clients.find(c => c.id === selectedClientId) || null;
-  const selectedShow = allShows.find(s => s.id === selectedShowId) || null;
 
   // Load client shows when client changes
   useEffect(() => {
     if (!selectedClientId) { setClientShows([]); return; }
     getClientShows(selectedClientId).then(setClientShows).catch(() => {});
-  }, [selectedClientId, allShows]);
+  }, [selectedClientId]);
 
   // Subscribe to activity logs when client tab is activity
   useEffect(() => {
@@ -159,16 +122,6 @@ function ClientManager() {
     closeDrawer();
   }
 
-  function selectShow(id) {
-    setSearchParams({ mode: 'shows', show: id }, { replace: false });
-    setShowEditMode(false);
-    closeDrawer();
-  }
-
-  function setMode(m) {
-    setSearchParams(m === 'clients' ? {} : { mode: m }, { replace: false });
-  }
-
   // ── Client filtering ───────────────────────────────────────────────────
   const filteredClients = clients
     .filter(c => {
@@ -183,22 +136,6 @@ function ClientManager() {
       if (clientSort === 'Last Contact') return (b.lastInteraction || '').localeCompare(a.lastInteraction || '');
       if (clientSort === 'Last Updated') return (b.updatedAt || '').localeCompare(a.updatedAt || '');
       return 0;
-    });
-
-  // ── Show filtering ─────────────────────────────────────────────────────
-  const showYears = [...new Set(allShows.map(s => extractYear(s.date)).filter(Boolean))].sort((a, b) => Number(b) - Number(a));
-
-  const filteredShows = allShows
-    .filter(s => {
-      const yr = extractYear(s.date) || '';
-      if (showYear && yr !== showYear) return false;
-      const text = `${s.venue || ''} ${s.city || ''} ${s.state || ''}`.toLowerCase();
-      return text.includes(showSearch.toLowerCase());
-    })
-    .sort((a, b) => {
-      const ta = new Date(a.date).getTime() || 0;
-      const tb = new Date(b.date).getTime() || 0;
-      return showSortDir === 'desc' ? tb - ta : ta - tb;
     });
 
   // ── Add log ────────────────────────────────────────────────────────────
@@ -220,314 +157,72 @@ function ClientManager() {
     setSearchParams({}, { replace: true });
   }
 
-  // ── Show form helpers ──────────────────────────────────────────────────
-  function openNewShow(client) {
-    const id = uuid();
-    const defaults = {
-      id,
-      venue: client?.type === 'Venue' ? client.name : '',
-      clientId: client?.id || '',
-      city: '', state: '',
-      date: '', startTime: client?.defaultStartTime || '', endTime: client?.defaultEndTime || '',
-      eventLink: '', setlistId: '',
-      itinerary: client?.defaultItinerary || '',
-      notes: client?.defaultNotes || '',
-      personnel: [], eventHandler: '',
-      payout: client?.rate || '',
-      isPrivate: false, published: false,
-    };
-    if (client?.address) {
-      const parts = client.address.split(',');
-      if (parts.length >= 2) {
-        defaults.city = parts[parts.length - 2]?.trim() || '';
-        const stateZip = parts[parts.length - 1]?.trim().split(' ');
-        defaults.state = stateZip[0] || '';
-      }
-    }
-    setShowForm(defaults);
-    setShowEditMode(true);
-    setShowDirty(false);
-    setSearchParams({ mode: 'shows', show: id }, { replace: false });
-  }
-
-  function openEditShow(show) {
-    setShowForm({
-      ...show,
-      personnel: show.personnel || [],
-      payout: show.payout || '',
-    });
-    setShowEditMode(true);
-    setShowDirty(false);
-  }
-
-  function setShowField(k, v) {
-    setShowForm(f => ({ ...f, [k]: v }));
-    setShowDirty(true);
-  }
-
-  function autoFillFromClient(clientId) {
-    const c = clients.find(x => x.id === clientId);
-    if (!c) return;
-    const updates = { clientId };
-    if (c.type === 'Venue') updates.venue = c.name;
-    if (c.address) {
-      const parts = c.address.split(',');
-      if (parts.length >= 2) {
-        updates.city = parts[parts.length - 2]?.trim() || '';
-        const stateZip = parts[parts.length - 1]?.trim().split(' ');
-        updates.state = stateZip[0] || '';
-      }
-    }
-    if (c.defaultStartTime) updates.startTime = c.defaultStartTime;
-    if (c.defaultEndTime) updates.endTime = c.defaultEndTime;
-    if (c.defaultItinerary) updates.itinerary = c.defaultItinerary;
-    if (c.defaultNotes) updates.notes = c.defaultNotes;
-    if (c.rate) updates.payout = c.rate;
-    setShowForm(f => ({ ...f, ...updates }));
-    setShowDirty(true);
-  }
-
-  async function handleSaveShow() {
-    if (!showForm.date) { alert('Date is required.'); return; }
-    setSavingShow(true);
-    try {
-      await saveShow({ ...showForm, updatedAt: new Date().toISOString() });
-      setShowEditMode(false);
-      setShowDirty(false);
-      // Refresh client shows if we know the client
-      if (showForm.clientId) getClientShows(showForm.clientId).then(setClientShows).catch(() => {});
-    } catch (err) { alert('Save failed: ' + err.message); }
-    finally { setSavingShow(false); }
-  }
-
-  function handleCancelShowEdit() {
-    if (showDirty && !window.confirm('Discard changes?')) return;
-    setShowEditMode(false);
-    setShowDirty(false);
-    if (!selectedShow && !allShows.find(s => s.id === selectedShowId)) {
-      setSearchParams({ mode: 'shows' }, { replace: true });
-    }
-  }
-
-  async function handleDeleteShow() {
-    if (!window.confirm('Delete this show?')) return;
-    await deleteShow(selectedShowId);
-    setSearchParams({ mode: 'shows' }, { replace: true });
-  }
-
-  // ── Calendar export ────────────────────────────────────────────────────
-  function openGoogleCalendar(show) {
-    function pad(n) { return String(n).padStart(2, '0'); }
-    function toGcalDate(dateStr, timeStr) {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '';
-      const match = timeStr?.match(/(\d+):(\d+)\s*(am|pm)?/i);
-      if (!match) return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}`;
-      let h = parseInt(match[1]);
-      const m = parseInt(match[2]);
-      const ampm = match[3]?.toLowerCase();
-      if (ampm === 'pm' && h !== 12) h += 12;
-      if (ampm === 'am' && h === 12) h = 0;
-      return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(h)}${pad(m)}00`;
-    }
-    const start = toGcalDate(show.date, show.startTime);
-    const end = toGcalDate(show.date, show.endTime) || start;
-    const url = new URL('https://calendar.google.com/calendar/render');
-    url.searchParams.set('action', 'TEMPLATE');
-    url.searchParams.set('text', show.venue || 'Show');
-    url.searchParams.set('dates', `${start}/${end}`);
-    url.searchParams.set('location', [show.venue, show.city, show.state].filter(Boolean).join(', '));
-    const details = [
-      `${window.location.origin}/clients?mode=shows&show=${show.id}`,
-      show.itinerary && `\n\nItinerary:\n${show.itinerary}`,
-      show.notes && `\n\nNotes:\n${show.notes}`,
-      show.personnel?.length && `\n\nPersonnel: ${show.personnel.join(', ')}`,
-    ].filter(Boolean).join('');
-    url.searchParams.set('details', details);
-    window.open(url.toString(), '_blank');
-    setCalendarDropdown(false);
-  }
-
-  function downloadIcs(show) {
-    function toIcsDate(dateStr, timeStr) {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '';
-      const match = timeStr?.match(/(\d+):(\d+)\s*(am|pm)?/i);
-      function pad(n) { return String(n).padStart(2, '0'); }
-      if (!match) return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}`;
-      let h = parseInt(match[1]);
-      const m = parseInt(match[2]);
-      const ampm = match[3]?.toLowerCase();
-      if (ampm === 'pm' && h !== 12) h += 12;
-      if (ampm === 'am' && h === 12) h = 0;
-      return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(h)}${pad(m)}00`;
-    }
-    const start = toIcsDate(show.date, show.startTime);
-    const end = toIcsDate(show.date, show.endTime) || start;
-    const ics = [
-      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Ultraphonics//EN',
-      'BEGIN:VEVENT',
-      `DTSTART:${start}`, `DTEND:${end}`,
-      `SUMMARY:${show.venue || 'Show'}`,
-      `LOCATION:${[show.venue, show.city, show.state].filter(Boolean).join(', ')}`,
-      `DESCRIPTION:${(show.itinerary || '').replace(/\n/g, '\\n')}`,
-      `URL:${window.location.origin}/clients?mode=shows&show=${show.id}`,
-      'END:VEVENT', 'END:VCALENDAR',
-    ].join('\r\n');
-    const blob = new Blob([ics], { type: 'text/calendar' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${(show.venue || 'show').replace(/\s+/g, '-')}.ics`;
-    a.click();
-    setCalendarDropdown(false);
-  }
-
   // ── Left panel ──────────────────────────────────────────────────────────
   const leftPanel = (
     <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}>
-      {/* Mode toggle */}
-      <div className="shrink-0 flex border-b border-[#2a2a2a]">
-        {['clients', 'shows'].map(m => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors capitalize ${
-              mode === m ? 'text-[#00ddde] border-b-2 border-[#00ddde]' : 'text-[#888] hover:text-white'
-            }`}
-          >
-            {m}
+      {/* Client controls */}
+      <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
+            <input type="text" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Search..." className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs placeholder-[#555] focus:outline-none focus:border-[#00ddde]" />
+          </div>
+          <button onClick={() => setClientFormOpen(true)} className="shrink-0 px-3 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-xs font-semibold transition-colors">
+            <i className="fas fa-plus" />
           </button>
-        ))}
+        </div>
+        <div className="flex gap-2">
+          <select value={clientStatusFilter} onChange={e => { setClientStatusFilter(e.target.value); localStorage.setItem('cm_clientStatus', e.target.value); }} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
+            {['All','Lead','Active','Past','Do Not Book'].map(s => <option key={s}>{s}</option>)}
+          </select>
+          <select value={clientTypeFilter} onChange={e => setClientTypeFilter(e.target.value)} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
+            {['All','Venue','Planner','Private','Corporate'].map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <select value={clientSort} onChange={e => setClientSort(e.target.value)} className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
+          {['Name A-Z','Name Z-A','Last Contact','Last Updated'].map(s => <option key={s}>{s}</option>)}
+        </select>
       </div>
 
-      {mode === 'clients' && (
-        <>
-          {/* Client controls */}
-          <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
-                <input type="text" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Search..." className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs placeholder-[#555] focus:outline-none focus:border-[#00ddde]" />
-              </div>
-              <button onClick={() => setClientFormOpen(true)} className="shrink-0 px-3 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-xs font-semibold transition-colors">
-                <i className="fas fa-plus" />
-              </button>
+      {/* Client list */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {filteredClients.map(c => (
+          <button
+            key={c.id}
+            onClick={() => selectClient(c.id)}
+            className={`w-full text-left px-4 py-3 border-b border-[#2a2a2a] transition-colors flex items-start gap-3 ${
+              selectedClientId === c.id ? 'bg-[#00ddde]/10 border-l-2 border-l-[#00ddde]' : 'hover:bg-white/5'
+            }`}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-white truncate">{c.name}</div>
+              {c.contactName && <div className="text-xs text-[#888] truncate">{c.contactName}</div>}
+              <div className="text-xs text-[#555] mt-0.5">{c.type}</div>
             </div>
-            <div className="flex gap-2">
-              <select value={clientStatusFilter} onChange={e => setClientStatusFilter(e.target.value)} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-                {['All','Lead','Active','Past','Do Not Book'].map(s => <option key={s}>{s}</option>)}
-              </select>
-              <select value={clientTypeFilter} onChange={e => setClientTypeFilter(e.target.value)} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-                {['All','Venue','Planner','Private','Corporate'].map(t => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <select value={clientSort} onChange={e => setClientSort(e.target.value)} className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-              {['Name A-Z','Name Z-A','Last Contact','Last Updated'].map(s => <option key={s}>{s}</option>)}
-            </select>
+            <StatusBadge status={c.status || 'Active'} />
+          </button>
+        ))}
+        {filteredClients.length === 0 && (
+          <div className="p-8 text-center text-[#555]">
+            <i className="fas fa-address-book text-2xl mb-2 block opacity-20" />
+            <p className="text-sm">No clients found</p>
           </div>
-
-          {/* Client list */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {filteredClients.map(c => (
-              <button
-                key={c.id}
-                onClick={() => selectClient(c.id)}
-                className={`w-full text-left px-4 py-3 border-b border-[#2a2a2a] transition-colors flex items-start gap-3 ${
-                  selectedClientId === c.id ? 'bg-[#00ddde]/10 border-l-2 border-l-[#00ddde]' : 'hover:bg-white/5'
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white truncate">{c.name}</div>
-                  {c.contactName && <div className="text-xs text-[#888] truncate">{c.contactName}</div>}
-                  <div className="text-xs text-[#555] mt-0.5">{c.type}</div>
-                </div>
-                <StatusBadge status={c.status || 'Active'} />
-              </button>
-            ))}
-            {filteredClients.length === 0 && (
-              <div className="p-8 text-center text-[#555]">
-                <i className="fas fa-address-book text-2xl mb-2 block opacity-20" />
-                <p className="text-sm">No clients found</p>
-              </div>
-            )}
-          </div>
-          <div className="shrink-0 px-4 py-2 border-t border-[#2a2a2a]">
-            <span className="text-xs text-[#555] font-mono">{filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}</span>
-          </div>
-        </>
-      )}
-
-      {mode === 'shows' && (
-        <>
-          {/* Show controls */}
-          <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
-                <input type="text" value={showSearch} onChange={e => setShowSearch(e.target.value)} placeholder="Search shows..." className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs placeholder-[#555] focus:outline-none focus:border-[#00ddde]" />
-              </div>
-              <button onClick={() => openNewShow(null)} className="shrink-0 px-3 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-xs font-semibold transition-colors">
-                <i className="fas fa-plus" />
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <select value={showYear} onChange={e => setShowYear(e.target.value)} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-                <option value="">All years</option>
-                {showYears.map(y => <option key={y}>{y}</option>)}
-              </select>
-              <select value={showSortDir} onChange={e => setShowSortDir(e.target.value)} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-                <option value="desc">Newest first</option>
-                <option value="asc">Oldest first</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Show list */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {filteredShows.map(s => (
-              <button
-                key={s.id}
-                onClick={() => selectShow(s.id)}
-                className={`w-full text-left px-4 py-3 border-b border-[#2a2a2a] transition-colors ${
-                  selectedShowId === s.id ? 'bg-[#00ddde]/10 border-l-2 border-l-[#00ddde]' : 'hover:bg-white/5'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-white truncate">{s.venue || 'Unnamed Show'}</div>
-                    {(s.city || s.state) && <div className="text-xs text-[#888]">{[s.city, s.state].filter(Boolean).join(', ')}</div>}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-xs font-semibold text-[#00ddde]">{formatDate(s.date)}</div>
-                    {s.isPrivate && <span className="text-[10px] text-[#888]">Private</span>}
-                  </div>
-                </div>
-              </button>
-            ))}
-            {filteredShows.length === 0 && (
-              <div className="p-8 text-center text-[#555]">
-                <i className="fas fa-calendar text-2xl mb-2 block opacity-20" />
-                <p className="text-sm">No shows found</p>
-              </div>
-            )}
-          </div>
-          <div className="shrink-0 px-4 py-2 border-t border-[#2a2a2a]">
-            <span className="text-xs text-[#555] font-mono">{filteredShows.length} show{filteredShows.length !== 1 ? 's' : ''}</span>
-          </div>
-        </>
-      )}
+        )}
+      </div>
+      <div className="shrink-0 px-4 py-2 border-t border-[#2a2a2a]">
+        <span className="text-xs text-[#555] font-mono">{filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}</span>
+      </div>
     </div>
   );
 
   // ── Right panel ────────────────────────────────────────────────────────
   const rightPanel = (
     <div className="flex flex-col overflow-hidden bg-[#121212]">
-      {/* Client detail */}
-      {mode === 'clients' && !selectedClientId && (
+      {!selectedClientId && (
         <EmptyState icon="fa-address-book" message="Select a client to view details" />
       )}
 
-      {mode === 'clients' && selectedClientId && selectedClient && (
+      {selectedClientId && selectedClient && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Client header */}
           <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-center gap-3">
@@ -539,7 +234,7 @@ function ClientManager() {
               {selectedClient.type && <p className="text-xs text-[#888]">{selectedClient.type}</p>}
             </div>
             <div className="shrink-0 flex items-center gap-1">
-              <button onClick={() => openNewShow(selectedClient)} className="px-3 py-1.5 bg-[#008c8d]/20 border border-[#008c8d]/40 text-[#00ddde] rounded-lg text-xs font-semibold hover:bg-[#008c8d]/30 transition-colors">
+              <button onClick={() => navigate(`/shows?show=new&clientId=${selectedClient.id}`)} className="px-3 py-1.5 bg-[#008c8d]/20 border border-[#008c8d]/40 text-[#00ddde] rounded-lg text-xs font-semibold hover:bg-[#008c8d]/30 transition-colors">
                 <i className="fas fa-plus mr-1" />Show
               </button>
               <button onClick={() => { setEditingClient(selectedClient); setClientFormOpen(true); }} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors">
@@ -553,7 +248,7 @@ function ClientManager() {
 
           {/* Client tabs */}
           <div className="shrink-0 flex border-b border-[#2a2a2a]">
-            {['profile','financials','activity'].map(tab => (
+            {['profile','shows','financials','activity'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setClientDetailTab(tab)}
@@ -568,8 +263,10 @@ function ClientManager() {
 
           {/* Client tab content */}
           <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+            <div className="max-w-2xl mx-auto">
             {clientDetailTab === 'profile' && <ClientProfile client={selectedClient} />}
-            {clientDetailTab === 'financials' && <ClientFinancials shows={clientShows} onShowClick={id => selectShow(id)} />}
+            {clientDetailTab === 'shows' && <ClientShows shows={clientShows} onShowClick={id => navigate('/shows?show=' + id)} />}
+            {clientDetailTab === 'financials' && <ClientFinancials shows={clientShows} onShowClick={id => navigate('/shows?show=' + id)} />}
             {clientDetailTab === 'activity' && (
               <ClientActivity
                 logs={activityLogs}
@@ -582,89 +279,9 @@ function ClientManager() {
                 user={user}
               />
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Shows mode — empty */}
-      {mode === 'shows' && !selectedShowId && !showEditMode && (
-        <EmptyState icon="fa-calendar-days" message="Select a show or create a new one" />
-      )}
-
-      {/* Shows mode — edit form */}
-      {mode === 'shows' && showEditMode && showForm && (
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-center gap-3">
-            <button onClick={handleCancelShowEdit} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors">
-              <i className="fas fa-times text-sm" />
-            </button>
-            <h2 className="flex-1 text-sm font-bold text-white">{showForm.id && allShows.find(s => s.id === showForm.id) ? 'Edit Show' : 'New Show'}</h2>
-            <button onClick={handleSaveShow} disabled={savingShow} className="px-4 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2">
-              {savingShow ? <><i className="fas fa-spinner fa-spin" /> Saving</> : <><i className="fas fa-check" /> Save</>}
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-            <ShowEditForm
-              form={showForm}
-              setField={setShowField}
-              clients={clients}
-              setlists={setlists}
-              onClientChange={autoFillFromClient}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Shows mode — detail view */}
-      {mode === 'shows' && !showEditMode && selectedShowId && selectedShow && (
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-base font-bold text-white truncate">{selectedShow.venue || 'Unnamed Show'}</h2>
-              {selectedShow.city && <p className="text-xs text-[#888]">{[selectedShow.city, selectedShow.state].filter(Boolean).join(', ')}</p>}
-            </div>
-            <div className="shrink-0 flex items-center gap-1">
-              {/* Personnel bubbles */}
-              <div className="flex items-center gap-1 mr-2">
-                {(selectedShow.personnel || []).map(p => <PersonnelBubble key={p} name={p} />)}
-              </div>
-
-              {/* Calendar dropdown */}
-              <div className="relative">
-                <button onClick={() => setCalendarDropdown(v => !v)} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors" title="Add to calendar">
-                  <i className="fas fa-calendar-plus text-sm" />
-                </button>
-                {calendarDropdown && (
-                  <div className="absolute right-0 top-full mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg shadow-xl z-20 min-w-[160px]">
-                    <button onClick={() => openGoogleCalendar(selectedShow)} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors flex items-center gap-2">
-                      <i className="fab fa-google text-[#4285f4] text-xs" />Google Calendar
-                    </button>
-                    <button onClick={() => downloadIcs(selectedShow)} className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors flex items-center gap-2">
-                      <i className="fas fa-download text-[#888] text-xs" />Download .ics
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button onClick={() => openEditShow(selectedShow)} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors">
-                <i className="fas fa-pen text-sm" />
-              </button>
-              <button onClick={handleDeleteShow} className="p-2 text-red-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
-                <i className="fas fa-trash text-sm" />
-              </button>
             </div>
           </div>
-
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-            <ShowDetail show={selectedShow} clients={clients} setlists={setlists} />
-          </div>
-
         </div>
-      )}
-
-      {/* Show not found */}
-      {mode === 'shows' && !showEditMode && selectedShowId && !selectedShow && (
-        <EmptyState icon="fa-circle-question" message="Show not found" />
       )}
     </div>
   );
@@ -747,6 +364,58 @@ function ClientProfile({ client }) {
 }
 
 // ── Client Financials tab ──────────────────────────────────────────────────
+// ── Client Shows tab ──────────────────────────────────────────────────────
+function ClientShows({ shows, onShowClick }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const sorted = [...shows].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const upcoming = sorted.filter(s => (s.date || '') >= today);
+  const past = sorted.filter(s => (s.date || '') < today);
+
+  function ShowRow({ s }) {
+    return (
+      <button
+        onClick={() => onShowClick(s.id)}
+        className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a] hover:bg-white/5 transition-colors text-left last:border-b-0"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-white truncate">{s.venue || 'Unnamed Show'}</div>
+          <div className="text-xs text-[#888]">{formatDate(s.date)}{s.startTime ? ` · ${s.startTime}` : ''}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {s.isPrivate && <span className="text-[10px] text-[#555]">Private</span>}
+          {s.published && !s.isPrivate && <span className="text-[10px] text-[#00ddde]">Public</span>}
+          <i className="fas fa-chevron-right text-[10px] text-[#444]" />
+        </div>
+      </button>
+    );
+  }
+
+  if (shows.length === 0) {
+    return <p className="text-sm text-[#555] py-4">No shows yet.</p>;
+  }
+
+  return (
+    <div className="space-y-5 max-w-xl">
+      {upcoming.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#555] mb-2">Upcoming</p>
+          <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg overflow-hidden">
+            {[...upcoming].reverse().map(s => <ShowRow key={s.id} s={s} />)}
+          </div>
+        </div>
+      )}
+      {past.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#555] mb-2">Past</p>
+          <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg overflow-hidden">
+            {past.map(s => <ShowRow key={s.id} s={s} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClientFinancials({ shows, onShowClick }) {
   const paid = shows.filter(s => s.payout > 0);
   const total = paid.reduce((sum, s) => sum + Number(s.payout || 0), 0);
@@ -858,168 +527,6 @@ function ClientActivity({ logs, logType, logContent, adding, onTypeChange, onCon
   );
 }
 
-// ── Show Detail ────────────────────────────────────────────────────────────
-function ShowDetail({ show, clients, setlists }) {
-  const client = clients.find(c => c.id === show.clientId);
-  const setlist = setlists.find(s => s.id === show.setlistId);
-
-  return (
-    <div className="space-y-4 max-w-xl">
-      <div className="flex items-center gap-2 flex-wrap">
-        {show.isPrivate && <Badge>Private</Badge>}
-        {show.published && <Badge color="#22c55e">Published</Badge>}
-      </div>
-
-      <Card title="Date & Time">
-        <InfoRow label="Date" value={formatDate(show.date)} accent />
-        {show.startTime && <InfoRow label="Time" value={`${show.startTime}${show.endTime ? ` – ${show.endTime}` : ''}`} />}
-      </Card>
-
-      <Card title="Venue">
-        {client && <InfoRow label="Client"><a className="text-[#00ddde] hover:underline" onClick={e => { e.preventDefault(); }}>{client.name}</a></InfoRow>}
-        {show.venue && <InfoRow label="Venue" value={show.venue} />}
-        {(show.city || show.state) && (
-          <InfoRow label="Location">
-            <a href={`https://maps.google.com/?q=${encodeURIComponent([show.venue, show.city, show.state].filter(Boolean).join(', '))}`} target="_blank" rel="noopener noreferrer" className="text-[#00ddde] hover:underline">
-              {[show.city, show.state].filter(Boolean).join(', ')}
-            </a>
-          </InfoRow>
-        )}
-      </Card>
-
-      {(show.eventLink || setlist || show.eventHandler) && (
-        <Card title="Details">
-          {show.eventLink && <InfoRow label="Event Link"><a href={show.eventLink} target="_blank" rel="noopener noreferrer" className="text-[#00ddde] hover:underline truncate">{show.eventLink}</a></InfoRow>}
-          {setlist && <InfoRow label="Setlist"><a href={`/setlists?id=${show.setlistId}`} className="text-[#00ddde] hover:underline">{setlist.name}</a></InfoRow>}
-          {show.eventHandler && <InfoRow label="Handler" value={show.eventHandler} />}
-        </Card>
-      )}
-
-      {show.personnel?.length > 0 && (
-        <Card title="Personnel">
-          <div className="flex flex-wrap gap-2">
-            {show.personnel.map(p => (
-              <div key={p} className="flex items-center gap-1.5">
-                <PersonnelBubble name={p} />
-                <span className="text-sm text-[#ccc]">{p}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {show.itinerary && (
-        <Card title="Itinerary">
-          <pre className="text-xs text-[#ccc] whitespace-pre-wrap font-sans">{show.itinerary}</pre>
-        </Card>
-      )}
-
-      {show.notes && (
-        <Card title="Notes">
-          <pre className="text-xs text-[#ccc] whitespace-pre-wrap font-sans">{show.notes}</pre>
-        </Card>
-      )}
-
-      {show.payout && (
-        <Card title="Payout">
-          <span className="text-2xl font-bold text-green-400">{formatCurrency(show.payout)}</span>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-// ── Show Edit Form ─────────────────────────────────────────────────────────
-function ShowEditForm({ form, setField, clients, setlists, onClientChange }) {
-  return (
-    <div className="space-y-4 max-w-xl pb-8">
-      <div className="grid grid-cols-2 gap-4">
-        <FormField label="Date *">
-          <input type="date" value={form.date || ''} onChange={e => setField('date', e.target.value)} className={INPUT} />
-        </FormField>
-        <FormField label="Client">
-          <select value={form.clientId || ''} onChange={e => { setField('clientId', e.target.value); onClientChange(e.target.value); }} className={SELECT}>
-            <option value="">— Select client —</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </FormField>
-      </div>
-      <FormField label="Venue Name">
-        <input type="text" value={form.venue || ''} onChange={e => setField('venue', e.target.value)} className={INPUT} placeholder="Venue / event name" />
-      </FormField>
-      <div className="grid grid-cols-2 gap-4">
-        <FormField label="City">
-          <input type="text" value={form.city || ''} onChange={e => setField('city', e.target.value)} className={INPUT} />
-        </FormField>
-        <FormField label="State">
-          <input type="text" value={form.state || ''} onChange={e => setField('state', e.target.value)} className={INPUT} />
-        </FormField>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <FormField label="Start Time">
-          <input type="text" value={form.startTime || ''} onChange={e => setField('startTime', e.target.value)} className={INPUT} placeholder="8:00 PM" />
-        </FormField>
-        <FormField label="End Time">
-          <input type="text" value={form.endTime || ''} onChange={e => setField('endTime', e.target.value)} className={INPUT} placeholder="11:00 PM" />
-        </FormField>
-      </div>
-      <FormField label="Event Link">
-        <input type="url" value={form.eventLink || ''} onChange={e => setField('eventLink', e.target.value)} className={INPUT} placeholder="https://..." />
-      </FormField>
-      <FormField label="Setlist">
-        <select value={form.setlistId || ''} onChange={e => setField('setlistId', e.target.value)} className={SELECT}>
-          <option value="">— Select setlist —</option>
-          {setlists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </FormField>
-      <FormField label="Itinerary">
-        <textarea rows={4} value={form.itinerary || ''} onChange={e => setField('itinerary', e.target.value)} className={INPUT + ' resize-y'} placeholder="Load-in at 6pm, soundcheck 7pm..." />
-      </FormField>
-      <FormField label="Notes">
-        <textarea rows={3} value={form.notes || ''} onChange={e => setField('notes', e.target.value)} className={INPUT + ' resize-y'} />
-      </FormField>
-      <FormField label="Personnel">
-        <div className="flex flex-wrap gap-2">
-          {PERSONNEL.map(p => {
-            const selected = (form.personnel || []).includes(p);
-            const color = PERSONNEL_COLORS[p];
-            return (
-              <button
-                key={p}
-                type="button"
-                onClick={() => {
-                  const current = form.personnel || [];
-                  setField('personnel', selected ? current.filter(x => x !== p) : [...current, p]);
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                style={selected
-                  ? { background: `${color}25`, color, border: `1px solid ${color}60` }
-                  : { color: '#888', border: '1px solid #2a2a2a' }
-                }
-              >
-                {p}
-              </button>
-            );
-          })}
-        </div>
-      </FormField>
-      <FormField label="Event Handler">
-        <select value={form.eventHandler || ''} onChange={e => setField('eventHandler', e.target.value)} className={SELECT}>
-          <option value="">— None —</option>
-          {PERSONNEL.map(p => <option key={p}>{p}</option>)}
-        </select>
-      </FormField>
-      <FormField label="Base Payout ($)">
-        <input type="number" value={form.payout || ''} onChange={e => setField('payout', e.target.value)} className={INPUT} placeholder="0" style={{ maxWidth: 160 }} />
-      </FormField>
-      <div className="flex flex-wrap gap-5 pt-1">
-        <CheckboxField label="Private Event" checked={!!form.isPrivate} onChange={v => setField('isPrivate', v)} />
-        <CheckboxField label="Published on Website" checked={!!form.published} onChange={v => setField('published', v)} />
-      </div>
-    </div>
-  );
-}
-
 // ── Client Form Modal ──────────────────────────────────────────────────────
 function ClientFormModal({ client, onClose, onSaved }) {
   const [form, setFormState] = useState(client ? { ...client } : {
@@ -1090,7 +597,24 @@ function ClientFormModal({ client, onClose, onSaved }) {
             <input type="url" value={form.website || ''} onChange={e => setField('website', e.target.value)} className={INPUT} placeholder="https://..." />
           </FormField>
           <FormField label="Address">
-            <input type="text" value={form.address || ''} onChange={e => setField('address', e.target.value)} className={INPUT} placeholder="123 Main St, Ann Arbor, MI 48104" />
+            <AddressAutocomplete
+              value={form.address || ''}
+              onChange={v => setField('address', v)}
+              onPlace={({ formattedAddress, streetAddress, city, state, postalCode, lat, lng }) => {
+                setFormState(f => ({
+                  ...f,
+                  address: formattedAddress,
+                  streetAddress,
+                  city: city || f.city,
+                  state: state || f.state,
+                  postalCode: postalCode || f.postalCode,
+                  ...(lat != null ? { lat, lng } : {}),
+                }));
+              }}
+              className={INPUT}
+              placeholder="123 Main St, Ann Arbor, MI 48104"
+              types={['geocode', 'establishment']}
+            />
           </FormField>
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Default Rate ($)">

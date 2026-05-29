@@ -158,7 +158,7 @@ export default function Home() {
                 availability: 'https://schema.org/InStock',
               }
             : undefined;
-        const eventUrl = firstUrl(s.eventLink, s.ticketUrl, SITE + '#shows');
+        const eventUrl = SITE + 'events/' + s.id;
         return {
           '@type': 'Event',
           name: `Ultraphonics at ${s.venue?.trim() || 'TBD'}`,

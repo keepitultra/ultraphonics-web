@@ -8,12 +8,12 @@ import { useSetlists, useSongs, useClients } from '../../firebase/useFirestore.j
 // ── App tile (large, colored accent) ────────────────────────────────────────
 function AppTile({ to, href, color, icon, title, subtitle }) {
   const body = (
-    <div className="group relative flex flex-col gap-2.5 p-5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden hover:bg-[#1f1f1f] transition-all duration-200 h-full min-h-[118px]">
+    <div className="group relative flex flex-col items-center justify-center gap-3 p-8 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden hover:bg-[#1f1f1f] transition-all duration-200 h-full min-h-[200px] text-center">
       <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
-      <div className="text-2xl mt-1" style={{ color }}>{icon}</div>
-      <div className="flex-1">
-        <div className="text-sm font-bold text-white leading-tight">{title}</div>
-        <div className="text-[#666] text-xs mt-0.5 leading-snug">{subtitle}</div>
+      <div className="text-4xl" style={{ color }}>{icon}</div>
+      <div>
+        <div className="text-base font-bold text-white leading-tight">{title}</div>
+        <div className="text-[#666] text-sm mt-1 leading-snug">{subtitle}</div>
       </div>
       <i className="fas fa-arrow-right absolute bottom-4 right-4 text-[#333] group-hover:text-[#555] transition-colors text-xs" />
     </div>
@@ -76,7 +76,7 @@ function AdminDashboard() {
 
       {/* Navbar */}
       <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a]">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-xl mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-3">
               <img src="/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-8 w-8" />
@@ -113,7 +113,7 @@ function AdminDashboard() {
 
       {/* Tab bar */}
       <div className="shrink-0 bg-[#121212]/60 border-b border-[#2a2a2a]">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-xl mx-auto px-4">
           <div className="flex overflow-x-auto">
             {TABS.map(({ id, label, icon }) => (
               <button
@@ -134,11 +134,12 @@ function AdminDashboard() {
 
       {/* Tab content */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-4 pt-6 pb-8">
+        <div className="max-w-xl mx-auto px-4 pt-6 pb-8">
 
           {/* ── Performance ──────────────────────────────────────────────── */}
           {activeTab === 'performance' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-3">
               <AppTile
                 to="/setlists"
                 color="#3b82f6"
@@ -161,6 +162,7 @@ function AdminDashboard() {
                 subtitle={ablesetUrl}
               />
             </div>
+            </div>
           )}
 
           {/* ── Booking ───────────────────────────────────────────────────── */}
@@ -175,8 +177,8 @@ function AdminDashboard() {
                   subtitle={`${activeClientCount} active client${activeClientCount !== 1 ? 's' : ''}`}
                 />
                 <AppTile
-                  to="/clients?mode=shows"
-                  color="#14b8a6"
+                  to="/shows"
+                  color="#a78bfa"
                   icon={<i className="fas fa-calendar-days" />}
                   title="Shows"
                   subtitle="Manage upcoming & past shows"
@@ -196,7 +198,7 @@ function AdminDashboard() {
           {activeTab === 'tools' && (
             <div className="space-y-6">
               {/* App tiles */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <AppTile
                   href="https://github.com/tdhckmn/ultraphonics"
                   color="#6b7280"
@@ -264,7 +266,7 @@ function AdminDashboard() {
 
       {/* Footer */}
       <footer className="shrink-0 h-9 flex items-center border-t border-[#2a2a2a] bg-[#121212]/60">
-        <div className="max-w-5xl w-full mx-auto px-4 flex justify-between items-center">
+        <div className="max-w-xl w-full mx-auto px-4 flex justify-between items-center">
           <p className="text-[#444] text-xs">Ultraphonics Admin Portal</p>
           <p className="text-[#333] text-xs">v5.0</p>
         </div>

@@ -7,6 +7,8 @@ export const config = {
   // API Keys and IDs
   ids: {
     googleAnalytics: "G-FEL0XX8F65",
+    // Restrict this key in Google Cloud Console to your domain + Maps JS API + Places API
+    googleMaps: "YOUR_GOOGLE_MAPS_API_KEY",
     emailjs: {
       publicKey: "KhA8Z-PRCg69qMpWp",
       serviceId: "service_eujinnf",
