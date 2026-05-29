@@ -19,7 +19,7 @@
     "start:electron": "electron .",
     "build": "vite build",
     "dev": "vite",
-    "build:legacy": "esbuild src/firebase-bundle.js --bundle --outfile=dist/firebase-bundle.js --format=iife --global-name=UltraphonicsFirebase --minify && esbuild src/main.js src/quote.js src/contact.js src/media-kit.js src/services.js src/weddings.js src/live-viewer.js --bundle --outdir=dist --format=iife --minify",
+    "build:legacy": "esbuild ./src/firebase-bundle.js --bundle --outfile=dist/firebase-bundle.js --format=iife --global-name=UltraphonicsFirebase --minify && esbuild ./src/main.js ./src/quote.js ./src/contact.js ./src/media-kit.js ./src/services.js ./src/weddings.js ./src/live-viewer.js --bundle --outdir=dist --format=iife --minify",
     "build:dev": "vite build --mode development",
     "build:icons": "bash scripts/prepare-icons.sh",
     "package:mac": "yarn build:legacy && yarn build:icons && electron-builder --mac --publish never",
