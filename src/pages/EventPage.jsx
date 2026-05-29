@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useShow } from '../firebase/useFirestore.js';
+import { getClientDetails } from '../firestore-service.js';
 import { parseLocalDateOnly, parseTimeToHM, formatCityState } from '../utils.js';
 
 const MAPS_EMBED_BASE = 'https://maps.google.com/maps';
@@ -40,6 +42,31 @@ function buildMapsQuery(show) {
   return venue || address || null;
 }
 
+function buildGoogleCalUrl(show) {
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function toGcalDate(dateStr, timeStr) {
+    const d = parseLocalDateOnly(dateStr);
+    if (!d || isNaN(d)) return '';
+    if (!timeStr) return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+    const { hours, minutes, isPM, isAM } = parseTimeToHM(timeStr);
+    if (isNaN(hours)) return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+    let h = hours;
+    if (isPM && h !== 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(minutes)}00`;
+  }
+  const start = toGcalDate(show.date, show.startTime);
+  const end = toGcalDate(show.date, show.endTime) || start;
+  const url = new URL('https://calendar.google.com/calendar/render');
+  url.searchParams.set('action', 'TEMPLATE');
+  url.searchParams.set('text', `Ultraphonics Live at ${show.venue || 'TBD'}`);
+  url.searchParams.set('dates', `${start}/${end}`);
+  const loc = buildMapsQuery({ ...show });
+  if (loc) url.searchParams.set('location', loc);
+  if (show.description) url.searchParams.set('details', show.description);
+  return url.toString();
+}
+
 function buildMapsUrl(show) {
   const q = buildMapsQuery(show);
   if (!q) return null;
@@ -49,6 +76,13 @@ function buildMapsUrl(show) {
 export default function EventPage() {
   const { id } = useParams();
   const { data: show, loading, error } = useShow(id);
+  const [client, setClient] = useState(null);
+
+  useEffect(() => {
+    if (show?.clientId) {
+      getClientDetails(show.clientId).then(setClient).catch(() => {});
+    }
+  }, [show?.clientId]);
 
   if (loading) {
     return (
@@ -78,6 +112,8 @@ export default function EventPage() {
   const mapsEmbedUrl = buildMapsUrl(show);
   const mapsQuery = buildMapsQuery(show);
   const mapsLinkUrl = mapsQuery ? `https://maps.google.com/?q=${encodeURIComponent(mapsQuery)}` : null;
+  const calUrl = buildGoogleCalUrl(show);
+  const venueWebsite = client?.website;
 
   return (
     <div className="min-h-screen" style={{ color: '#e7e5e4' }}>
@@ -111,42 +147,56 @@ export default function EventPage() {
           className="rounded-xl p-5 space-y-4"
           style={{ background: '#1c1917', border: '1px solid #292524' }}
         >
-          <div className="flex items-start gap-3">
-            <i className="fa-solid fa-calendar-days text-teal-400 mt-0.5 w-5 text-center" />
+          {/* Date & Time row */}
+          <div className="grid gap-y-4" style={{ gridTemplateColumns: '1.25rem 1fr' , columnGap: '0.75rem' }}>
+            <i className="fa-solid fa-calendar-days text-teal-400 mt-0.5 text-center" />
             <div>
               <p className="font-semibold text-white">{formatEventDate(show.date)}</p>
-              {timeRange && <p className="text-stone-400 text-sm">{timeRange}</p>}
+              {timeRange && <p className="text-stone-400 text-sm mt-0.5">{timeRange}</p>}
             </div>
-          </div>
 
-          <div className="flex items-start gap-3">
-            <i className="fa-solid fa-location-dot text-teal-400 mt-0.5 w-5 text-center" />
+            <i className="fa-solid fa-location-dot text-teal-400 mt-0.5 text-center" />
             <div>
-              <p className="font-semibold text-white">{venueText}</p>
+              {venueWebsite
+                ? <a href={venueWebsite} target="_blank" rel="noopener noreferrer" className="font-semibold text-white hover:text-teal-400 transition-colors">{venueText}</a>
+                : <p className="font-semibold text-white">{venueText}</p>
+              }
               {address && (
                 mapsLinkUrl
-                  ? <a href={mapsLinkUrl} target="_blank" rel="noopener noreferrer" className="text-stone-400 text-sm hover:text-teal-400">{address}</a>
-                  : <p className="text-stone-400 text-sm">{address}</p>
+                  ? <a href={mapsLinkUrl} target="_blank" rel="noopener noreferrer" className="text-stone-400 text-sm hover:text-teal-400 mt-0.5 block">{address}</a>
+                  : <p className="text-stone-400 text-sm mt-0.5">{address}</p>
               )}
-              {!address && cityState && <p className="text-stone-400 text-sm">{cityState}</p>}
+              {!address && cityState && <p className="text-stone-400 text-sm mt-0.5">{cityState}</p>}
             </div>
-          </div>
 
-          {show.price != null && (
-            <div className="flex items-start gap-3">
-              <i className="fa-solid fa-ticket text-teal-400 mt-0.5 w-5 text-center" />
+            {show.price != null && <>
+              <i className="fa-solid fa-ticket text-teal-400 mt-0.5 text-center" />
               <p className="text-white">{show.price === 0 ? 'Free admission' : `$${show.price} cover`}</p>
-            </div>
-          )}
+            </>}
+
+            {show.description && <>
+              <i className="fa-solid fa-align-left text-teal-400 mt-0.5 text-center" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">Description</p>
+                <p className="text-stone-300 text-sm leading-relaxed whitespace-pre-line">{show.description}</p>
+              </div>
+            </>}
+          </div>
         </div>
 
-        {/* Description */}
-        {show.description && (
-          <div>
-            <h2 className="text-lg font-semibold text-white mb-2">About this event</h2>
-            <p className="text-stone-300 leading-relaxed whitespace-pre-line">{show.description}</p>
-          </div>
-        )}
+        {/* Save to calendar */}
+        <a
+          href={calUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-3 rounded-xl px-5 py-4 font-semibold transition-colors"
+          style={{ background: '#1c1917', border: '1px solid #292524', color: '#e7e5e4' }}
+          onMouseOver={e => e.currentTarget.style.borderColor = '#14b8a6'}
+          onMouseOut={e => e.currentTarget.style.borderColor = '#292524'}
+        >
+          <i className="fa-solid fa-calendar-plus text-teal-400" />
+          Save to Calendar
+        </a>
 
         {/* Facebook event link */}
         {show.eventLink && (
