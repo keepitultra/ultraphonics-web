@@ -8,7 +8,7 @@ import {
   setPersistence,
   browserLocalPersistence,
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { app } from '../firebase-config.js';
 
 const auth = getAuth(app);
@@ -19,6 +19,17 @@ setPersistence(auth, browserLocalPersistence).catch(console.error);
 async function isUidAllowed(uid) {
   const snap = await getDoc(doc(db, 'allowedUsers', uid));
   return snap.exists();
+}
+
+async function syncMemberProfile(firebaseUser) {
+  const firstName = firebaseUser.displayName?.split(' ')[0] || firebaseUser.displayName || '';
+  await setDoc(doc(db, 'allowedUsers', firebaseUser.uid), {
+    displayName: firebaseUser.displayName || '',
+    firstName,
+    photoURL: firebaseUser.photoURL || '',
+    email: firebaseUser.email || '',
+    lastSeen: new Date().toISOString(),
+  }, { merge: true });
 }
 
 const AuthContext = createContext(null);
@@ -35,6 +46,7 @@ export function AuthProvider({ children }) {
           await signOut(auth);
           setUser(null);
         } else {
+          syncMemberProfile(firebaseUser).catch(console.error);
           setUser(firebaseUser);
         }
       } else {

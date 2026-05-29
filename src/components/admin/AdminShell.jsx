@@ -17,9 +17,10 @@ export function AdminDrawerProvider({ children }) {
 }
 
 const APPS = [
-  { id: 'setlists', label: 'Setlists', path: '/setlists' },
-  { id: 'songs',    label: 'Songs',    path: '/songs' },
-  { id: 'clients',  label: 'Clients',  path: '/clients' },
+  { id: 'setlists', label: 'Setlists', path: '/setlists', icon: 'fa-list-music',   color: '#3b82f6' },
+  { id: 'songs',    label: 'Songs',    path: '/songs',    icon: 'fa-music',        color: '#22c55e' },
+  { id: 'clients',  label: 'Clients',  path: '/clients',  icon: 'fa-address-book',  color: '#00ddde' },
+  { id: 'shows',    label: 'Shows',    path: '/shows',    icon: 'fa-calendar-days', color: '#a78bfa' },
 ];
 
 /** @param {{ activeApp: string, children: import('react').ReactNode }} props */
@@ -55,19 +56,25 @@ export default function AdminShell({ activeApp, children }) {
 
           {/* App switcher */}
           <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-            {APPS.map(app => (
-              <button
-                key={app.id}
-                onClick={() => { close(); navigate(app.path); }}
-                className={`px-3 py-1.5 text-sm font-semibold rounded-md whitespace-nowrap transition-colors ${
-                  activeApp === app.id
-                    ? 'text-[#00ddde] bg-[#00ddde]/10'
-                    : 'text-[#888] hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {app.label}
-              </button>
-            ))}
+            {APPS.map(app => {
+              const active = activeApp === app.id;
+              return (
+                <button
+                  key={app.id}
+                  onClick={() => { close(); navigate(app.path); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md whitespace-nowrap transition-colors"
+                  style={active
+                    ? { color: app.color, background: `${app.color}18` }
+                    : { color: '#888' }
+                  }
+                  onMouseEnter={e => { if (!active) { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; } }}
+                  onMouseLeave={e => { if (!active) { e.currentTarget.style.color = '#888'; e.currentTarget.style.background = 'transparent'; } }}
+                >
+                  <i className={`fas ${app.icon} text-xs`} />
+                  {app.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Right actions */}

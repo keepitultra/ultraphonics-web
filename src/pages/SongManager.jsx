@@ -88,7 +88,7 @@ function uuid() {
 }
 
 // ── Shared input styles ───────────────────────────────────────────────────
-const INPUT = 'w-full px-3 py-2.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#00ddde]';
+const INPUT = 'w-full px-3 py-2.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#22c55e]';
 
 // ── Badge ─────────────────────────────────────────────────────────────────
 function Badge({ children, color = '#888' }) {
@@ -312,10 +312,10 @@ export default function SongManager() {
       onDrop={handleDrop}
     >
       {dragOver && (
-        <div className="absolute inset-0 bg-[#00ddde]/10 border-2 border-dashed border-[#00ddde] rounded flex items-center justify-center z-30 pointer-events-none">
+        <div className="absolute inset-0 bg-[#22c55e]/10 border-2 border-dashed border-[#22c55e] rounded flex items-center justify-center z-30 pointer-events-none">
           <div className="text-center">
-            <i className="fas fa-cloud-arrow-up text-3xl text-[#00ddde] mb-2 block" />
-            <p className="text-[#00ddde] font-semibold text-sm">Drop AbleSet JSON here</p>
+            <i className="fas fa-cloud-arrow-up text-3xl text-[#22c55e] mb-2 block" />
+            <p className="text-[#22c55e] font-semibold text-sm">Drop AbleSet JSON here</p>
           </div>
         </div>
       )}
@@ -329,13 +329,13 @@ export default function SongManager() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search songs..."
-            className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm placeholder-[#555] focus:outline-none focus:border-[#00ddde]"
+            className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm placeholder-[#555] focus:outline-none focus:border-[#22c55e]"
           />
         </div>
         {user && (
           <button
             onClick={addNew}
-            className="shrink-0 px-3 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5"
+            className="shrink-0 px-3 py-2 bg-[#16a34a] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5"
             title="Add Song"
           >
             <i className="fas fa-plus text-xs" />
@@ -359,7 +359,7 @@ export default function SongManager() {
           <p className="text-xs text-[#888] mb-2">Upload .json or .ableset to sync library</p>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full px-3 py-2 bg-[#008c8d]/20 border border-[#008c8d]/50 text-[#00ddde] rounded-lg text-xs font-semibold hover:bg-[#008c8d]/30 transition-colors"
+            className="w-full px-3 py-2 bg-[#16a34a]/20 border border-[#16a34a]/50 text-[#22c55e] rounded-lg text-xs font-semibold hover:bg-[#16a34a]/30 transition-colors"
           >
             <i className="fas fa-folder-open mr-1.5" />Choose File
           </button>
@@ -393,7 +393,7 @@ export default function SongManager() {
                     onClick={() => selectSong(song.id)}
                     className={`w-full text-left px-4 py-2.5 border-b border-[#2a2a2a] transition-colors flex items-center gap-3 ${
                       isActive
-                        ? 'bg-[#00ddde]/10 border-l-2 border-l-[#00ddde]'
+                        ? 'bg-[#22c55e]/10 border-l-2 border-l-[#22c55e]'
                         : 'hover:bg-white/5'
                     } ${isArch ? 'opacity-40' : ''}`}
                   >
@@ -406,7 +406,7 @@ export default function SongManager() {
                       {song.eflat && <Badge color="#a78bfa">Eb</Badge>}
                       {song.dropD && <Badge color="#818cf8">Drop</Badge>}
                       {song.capo > 0 && <Badge color="#f59e0b">Capo {song.capo}</Badge>}
-                      {song.key && <Badge color="#00ddde">{song.key}</Badge>}
+                      {song.key && <Badge color="#22c55e">{song.key}</Badge>}
                     </div>
                   </button>
                 );
@@ -521,7 +521,7 @@ export default function SongManager() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 bg-[#16a34a] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {saving ? <><i className="fas fa-spinner fa-spin" /> Saving...</> : <><i className="fas fa-check" /> Save</>}
             </button>
@@ -552,7 +552,7 @@ export default function SongManager() {
         >
           <div className="bg-[#1a1a1a] w-full max-w-lg rounded-xl shadow-2xl border border-[#2a2a2a] overflow-hidden max-h-[85vh] flex flex-col">
             <div className="shrink-0 px-5 py-4 border-b border-[#2a2a2a] flex justify-between items-center">
-              <p className="text-base font-bold text-white"><i className="fas fa-sync text-[#00ddde] mr-2" />AbleSet Sync Preview</p>
+              <p className="text-base font-bold text-white"><i className="fas fa-sync text-[#22c55e] mr-2" />AbleSet Sync Preview</p>
               <button onClick={() => { setImportOpen(false); setPendingDiff(null); }} className="text-[#888] hover:text-white p-1">
                 <i className="fas fa-times" />
               </button>
@@ -611,7 +611,7 @@ export default function SongManager() {
               <button
                 onClick={executeSync}
                 disabled={syncing || (pendingDiff.toCreate.length + pendingDiff.toUpdate.length + pendingDiff.toArchive.length === 0)}
-                className="px-4 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-[#16a34a] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 <i className="fas fa-sync" />{syncing ? 'Syncing...' : 'Confirm Sync'}
               </button>
@@ -630,7 +630,7 @@ function MetaItem({ label, value, accent }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-xs text-[#555]">{label}:</span>
-      <span className={`text-xs font-semibold ${accent ? 'text-[#00ddde]' : 'text-[#ccc]'}`}>{value}</span>
+      <span className={`text-xs font-semibold ${accent ? 'text-[#22c55e]' : 'text-[#ccc]'}`}>{value}</span>
     </div>
   );
 }
@@ -654,7 +654,7 @@ function SongView({ song }) {
           <ol className="space-y-1">
             {footnotes.map((note, i) => (
               <li key={i} className="text-sm text-[#aaa]">
-                <span className="text-[#00ddde] font-bold mr-2">{i + 1}.</span>{note}
+                <span className="text-[#22c55e] font-bold mr-2">{i + 1}.</span>{note}
               </li>
             ))}
           </ol>
@@ -745,7 +745,7 @@ function CheckField({ label, checked, onChange }) {
         type="checkbox"
         checked={checked}
         onChange={e => onChange(e.target.checked)}
-        className="w-4 h-4 rounded accent-[#008c8d]"
+        className="w-4 h-4 rounded accent-[#16a34a]"
       />
       <span className="text-sm text-[#ccc]">{label}</span>
     </label>

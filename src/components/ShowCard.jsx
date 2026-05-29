@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { trackEvent } from '../analytics.js';
 
 function formatDate(dateStr) {
@@ -27,23 +28,12 @@ export default function ShowCard({ show }) {
     });
   };
 
-  const venueNode = show.eventLink ? (
-    <a
-      href={show.eventLink}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="venue-link"
-      onClick={handleClick}
-    >
-      {linkText}
-    </a>
-  ) : (
-    linkText
-  );
-
   return (
     <div>
-      {formattedDate} • {venueNode}
+      {formattedDate} •{' '}
+      <Link to={`/events/${show.id}`} className="venue-link" onClick={handleClick}>
+        {linkText}
+      </Link>
       {time ? ` • ${time}` : ''}
     </div>
   );
