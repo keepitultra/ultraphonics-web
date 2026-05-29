@@ -3,7 +3,8 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import Sortable from 'sortablejs';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
-import { useSetlists, useSongs } from '../firebase/useFirestore.js';
+import { useSetlists, useSongs, useMemberProfiles } from '../firebase/useFirestore.js';
+import MemberAvatar from '../components/MemberAvatar.jsx';
 import { saveSetlist, deleteSetlist, updateSong } from '../firestore-service.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ export default function SetlistManager() {
   const { data: setlists = [] } = useSetlists();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { data: allSongs = [] } = useSongs();
+  const memberProfiles = useMemberProfiles();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -270,7 +272,7 @@ export default function SetlistManager() {
             onClick={() => setLeftTab(tab)}
             className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors capitalize ${
               leftTab === tab
-                ? 'text-[#00ddde] border-b-2 border-[#00ddde]'
+                ? 'text-[#3b82f6] border-b-2 border-[#3b82f6]'
                 : 'text-[#888] hover:text-white'
             }`}
           >
@@ -301,7 +303,7 @@ export default function SetlistManager() {
                   }}
                   className={`w-full text-left px-4 py-3 border-b border-[#2a2a2a] transition-colors ${
                     isActive
-                      ? 'bg-[#00ddde]/10 border-l-2 border-l-[#00ddde]'
+                      ? 'bg-[#3b82f6]/10 border-l-2 border-l-[#3b82f6]'
                       : 'hover:bg-white/5'
                   }`}
                 >
@@ -330,7 +332,7 @@ export default function SetlistManager() {
             <div className="shrink-0 p-3 border-t border-[#2a2a2a]">
               <button
                 onClick={handleNew}
-                className="w-full py-2 bg-[#008c8d]/20 border border-[#008c8d]/40 text-[#00ddde] rounded-lg text-sm font-semibold hover:bg-[#008c8d]/30 transition-colors"
+                className="w-full py-2 bg-[#1d4ed8]/20 border border-[#1d4ed8]/40 text-[#3b82f6] rounded-lg text-sm font-semibold hover:bg-[#1d4ed8]/30 transition-colors"
               >
                 <i className="fas fa-plus mr-1.5" />New Setlist
               </button>
@@ -350,7 +352,7 @@ export default function SetlistManager() {
                 value={libSearch}
                 onChange={e => setLibSearch(e.target.value)}
                 placeholder="Search songs..."
-                className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm placeholder-[#555] focus:outline-none focus:border-[#00ddde]"
+                className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm placeholder-[#555] focus:outline-none focus:border-[#3b82f6]"
               />
             </div>
             <label className="flex items-center gap-2 cursor-pointer text-xs text-[#888] hover:text-white transition-colors">
@@ -378,7 +380,7 @@ export default function SetlistManager() {
                     <i className="fas fa-grip-vertical text-[#444] text-xs shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-semibold truncate ${isSetMarker(song) ? 'text-[#00ddde]' : 'text-white'}`}>
+                    <div className={`text-sm font-semibold truncate ${isSetMarker(song) ? 'text-[#3b82f6]' : 'text-white'}`}>
                       {song.title || song.name}
                     </div>
                     {song.artist && !isSetMarker(song) && <div className="text-xs text-[#888] truncate">{song.artist}</div>}
@@ -389,7 +391,7 @@ export default function SetlistManager() {
                         setSetlistSongs(prev => [...prev, { id: song.id, lastKnownName: song.title || song.name || '', title: song.title || song.name || '' }]);
                         setIsDirty(true);
                       }}
-                      className="shrink-0 w-6 h-6 flex items-center justify-center bg-[#008c8d]/20 border border-[#008c8d]/40 text-[#00ddde] rounded transition-colors hover:bg-[#008c8d]/40"
+                      className="shrink-0 w-6 h-6 flex items-center justify-center bg-[#1d4ed8]/20 border border-[#1d4ed8]/40 text-[#3b82f6] rounded transition-colors hover:bg-[#1d4ed8]/40"
                     >
                       <i className="fas fa-plus text-[10px]" />
                     </button>
@@ -420,13 +422,13 @@ export default function SetlistManager() {
             onChange={e => { setSetlistName(e.target.value); setIsDirty(true); }}
             onBlur={() => setEditingName(false)}
             onKeyDown={e => { if (e.key === 'Enter') setEditingName(false); }}
-            className="flex-1 px-2 py-1 bg-[#1a1a1a] border border-[#00ddde] rounded text-white text-sm font-bold focus:outline-none"
+            className="flex-1 px-2 py-1 bg-[#1a1a1a] border border-[#3b82f6] rounded text-white text-sm font-bold focus:outline-none"
             autoFocus
           />
         ) : (
           <button
             onClick={() => { if (user && !viewMode) { setEditingName(true); } }}
-            className={`flex-1 text-left text-sm font-bold text-white truncate ${user && !viewMode ? 'hover:text-[#00ddde] cursor-text' : 'cursor-default'}`}
+            className={`flex-1 text-left text-sm font-bold text-white truncate ${user && !viewMode ? 'hover:text-[#3b82f6] cursor-text' : 'cursor-default'}`}
             title={user && !viewMode ? 'Click to rename' : ''}
           >
             {setlistName || <span className="text-[#555] font-normal">No setlist selected</span>}
@@ -454,7 +456,7 @@ export default function SetlistManager() {
                       disabled={saving || !isDirty}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
                         isDirty
-                          ? 'bg-[#008c8d] hover:bg-[#00a8a9] text-white'
+                          ? 'bg-[#1d4ed8] hover:bg-[#00a8a9] text-white'
                           : 'bg-[#2a2a2a] text-[#555] cursor-not-allowed'
                       } disabled:opacity-50`}
                     >
@@ -480,7 +482,7 @@ export default function SetlistManager() {
               <i className="fas fa-list text-5xl mb-4 block opacity-20" />
               <p className="text-sm">Select or create a setlist</p>
               {user && (
-                <button onClick={handleNew} className="mt-4 px-4 py-2 bg-[#008c8d]/20 border border-[#008c8d]/40 text-[#00ddde] rounded-lg text-sm font-semibold hover:bg-[#008c8d]/30 transition-colors">
+                <button onClick={handleNew} className="mt-4 px-4 py-2 bg-[#1d4ed8]/20 border border-[#1d4ed8]/40 text-[#3b82f6] rounded-lg text-sm font-semibold hover:bg-[#1d4ed8]/30 transition-colors">
                   <i className="fas fa-plus mr-1.5" />New Setlist
                 </button>
               )}
@@ -509,12 +511,12 @@ export default function SetlistManager() {
                 <div
                   key={`${song.id}-${idx}`}
                   data-id={song.id}
-                  className="flex items-center gap-3 px-4 py-2.5 border-b border-[#2a2a2a] bg-[#1a1a1a] border-l-2 border-l-[#00ddde]"
+                  className="flex items-center gap-3 px-4 py-2.5 border-b border-[#2a2a2a] bg-[#1a1a1a] border-l-2 border-l-[#3b82f6]"
                 >
                   {!viewMode && (
                     <i className="drag-handle fas fa-grip-vertical text-[#444] cursor-grab text-sm" />
                   )}
-                  <span className="flex-1 text-sm font-bold text-[#00ddde] uppercase tracking-wide">
+                  <span className="flex-1 text-sm font-bold text-[#3b82f6] uppercase tracking-wide">
                     {song.title || song.lastKnownName}
                   </span>
                   {!viewMode && user && (
@@ -539,7 +541,7 @@ export default function SetlistManager() {
                 {viewMode ? (
                   <Link
                     to={`/songs?id=${song.id}&back=${encodeURIComponent(`/setlists?id=${selectedId}`)}`}
-                    className="flex-1 min-w-0 text-sm text-white hover:text-[#00ddde] transition-colors truncate font-medium"
+                    className="flex-1 min-w-0 text-sm text-white hover:text-[#3b82f6] transition-colors truncate font-medium"
                   >
                     {song.title || song.lastKnownName}
                   </Link>
@@ -552,12 +554,7 @@ export default function SetlistManager() {
                 {/* Indicators */}
                 <div className="shrink-0 flex items-center gap-1.5">
                   {vocalist && (
-                    <span
-                      className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                      style={{ background: `${vocalistColor}20`, color: vocalistColor, border: `1px solid ${vocalistColor}40` }}
-                    >
-                      {vocalist[0]}
-                    </span>
+                    <MemberAvatar name={vocalist} profiles={memberProfiles} color={vocalistColor} size={20} />
                   )}
                   {/* Find song in allSongs for badges */}
                   {(() => {
@@ -571,7 +568,7 @@ export default function SetlistManager() {
                       </>
                     );
                   })()}
-                  {hasSegue && <TinyBadge color="#00ddde">~</TinyBadge>}
+                  {hasSegue && <TinyBadge color="#3b82f6">~</TinyBadge>}
                 </div>
 
                 {!viewMode && user && (
@@ -641,12 +638,13 @@ export default function SetlistManager() {
           onSaveGlobal={async (songId, data) => {
             await updateSong(songId, data);
           }}
+          memberProfiles={memberProfiles}
           onClose={() => setPropsModalSong(null)}
         />
       )}
 
       <style>{`
-        .sortable-ghost { opacity: 0.3; background: #00ddde20 !important; }
+        .sortable-ghost { opacity: 0.3; background: #3b82f620 !important; }
       `}</style>
     </AdminShell>
   );
@@ -660,7 +658,7 @@ function IconBtn({ onClick, icon, title, active }) {
       title={title}
       className={`p-1.5 rounded-lg transition-colors text-sm ${
         active
-          ? 'text-[#00ddde] bg-[#00ddde]/10'
+          ? 'text-[#3b82f6] bg-[#3b82f6]/10'
           : 'text-[#888] hover:text-white hover:bg-white/5'
       }`}
     >
@@ -681,7 +679,7 @@ function TinyBadge({ children, color }) {
 }
 
 // ── Song Properties Modal ─────────────────────────────────────────────────
-function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveLocal, onSaveGlobal, onClose }) {
+function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveLocal, onSaveGlobal, onClose, memberProfiles = {} }) {
   const songData = allSongs.find(s => s.id === song.id) || {};
   const [vocalist, setVocalist] = useState(vocalAssignments[song.id] || '');
   const [segue, setSegue] = useState(!!segues[song.id]);
@@ -731,12 +729,13 @@ function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveL
                   <button
                     key={v}
                     onClick={() => setVocalist(v)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all"
                     style={isActive
                       ? { background: `${color}30`, color, border: `1px solid ${color}60` }
                       : { color: '#888', border: '1px solid transparent' }
                     }
                   >
+                    <MemberAvatar name={v} profiles={memberProfiles} color={color} size={20} />
                     {v}
                   </button>
                 );
@@ -748,7 +747,7 @@ function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveL
           <label className="flex items-center gap-3 cursor-pointer">
             <div
               onClick={() => setSegue(v => !v)}
-              className={`w-10 h-6 rounded-full transition-colors flex items-center cursor-pointer ${segue ? 'bg-[#008c8d]' : 'bg-[#2a2a2a]'}`}
+              className={`w-10 h-6 rounded-full transition-colors flex items-center cursor-pointer ${segue ? 'bg-[#1d4ed8]' : 'bg-[#2a2a2a]'}`}
             >
               <div className={`w-4 h-4 bg-white rounded-full transition-transform mx-1 ${segue ? 'translate-x-4' : 'translate-x-0'}`} />
             </div>
@@ -763,15 +762,15 @@ function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveL
                 <input
                   type="number" min="0" max="12" value={capo}
                   onChange={e => setCapo(e.target.value)}
-                  className="w-20 px-3 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#00ddde]"
+                  className="w-20 px-3 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#3b82f6]"
                 />
               </div>
               <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={dropD} onChange={e => setDropD(e.target.checked)} className="w-4 h-4 rounded accent-[#008c8d]" />
+                <input type="checkbox" checked={dropD} onChange={e => setDropD(e.target.checked)} className="w-4 h-4 rounded accent-[#1d4ed8]" />
                 <span className="text-sm text-[#ccc]">Drop D</span>
               </label>
               <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={eflat} onChange={e => setEflat(e.target.checked)} className="w-4 h-4 rounded accent-[#008c8d]" />
+                <input type="checkbox" checked={eflat} onChange={e => setEflat(e.target.checked)} className="w-4 h-4 rounded accent-[#1d4ed8]" />
                 <span className="text-sm text-[#ccc]">Eb tuning</span>
               </label>
             </div>
@@ -785,7 +784,7 @@ function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveL
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-[#1d4ed8] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save'}
           </button>

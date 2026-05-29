@@ -1023,6 +1023,14 @@ footer {
     box-shadow: 0 0 8px var(--color-accent);
 }
 
+.hamburger-back-btn i {
+    transition: color 0.3s ease, filter 0.3s ease;
+}
+.hamburger-back-btn:hover i {
+    color: var(--color-accent) !important;
+    filter: drop-shadow(0 0 8px var(--color-accent)) !important;
+}
+
 /* Open State Animation (X) */
 .hamburger-btn.open .hamburger-line:first-child {
   transform: rotate(45deg);

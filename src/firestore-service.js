@@ -465,4 +465,19 @@ export async function saveQuote(quote) {
   });
 }
 
+/**
+ * Subscribe to all allowedUsers member profiles with real-time updates.
+ * Each doc contains { firstName, displayName, photoURL, email }
+ */
+export function subscribeToMembers(callback, onError) {
+  return onSnapshot(
+    collection(db, 'allowedUsers'),
+    (snapshot) => {
+      const members = snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
+      callback(members);
+    },
+    onError
+  );
+}
+
 export { db, COLLECTIONS };
