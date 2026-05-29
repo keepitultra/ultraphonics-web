@@ -719,7 +719,7 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
   const [guestInstrument, setGuestInstrument] = useState('Guitar');
   const [addingGuest, setAddingGuest] = useState(false);
 
-  const activeClients = clients.filter(c => (c.status || 'Active') === 'Active');
+  const activeClients = clients.filter(c => (c.status || 'Active') === 'Active').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const selectedClient = clients.find(c => c.id === form.clientId);
 
   function addGuest() {
