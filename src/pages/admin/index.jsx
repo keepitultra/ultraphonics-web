@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { version } from '../../../package.json';
 import { Link } from 'react-router-dom';
 import AuthGuard from '../../components/AuthGuard.jsx';
 import SettingsModal from '../../components/admin/SettingsModal.jsx';
@@ -268,7 +269,7 @@ function AdminDashboard() {
       <footer className="shrink-0 h-9 flex items-center border-t border-[#2a2a2a] bg-[#121212]/60">
         <div className="max-w-xl w-full mx-auto px-4 flex justify-between items-center">
           <p className="text-[#444] text-xs">Ultraphonics Admin Portal</p>
-          <p className="text-[#333] text-xs">v5.0</p>
+          <p className="text-[#333] text-xs">v{version}</p>
         </div>
       </footer>
 
