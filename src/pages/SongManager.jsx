@@ -451,10 +451,16 @@ export default function SongManager() {
     <div className="flex-1 flex flex-col min-h-0">
       {/* Empty state */}
       {!selectedId && mode !== 'edit' && (
-        <div className="flex-1 flex items-center justify-center text-[#555]">
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <i className="fas fa-music text-5xl mb-4 block opacity-20" />
-            <p className="text-sm">Select a song to view details</p>
+            <p className="text-base font-bold mb-5" style={{ color: '#22c55e' }}>Songs</p>
+            <i className="fas fa-music text-5xl mb-4 block opacity-20 text-[#555]" />
+            <p className="text-sm text-[#555]">Select a song to view details</p>
+            {user && (
+              <button onClick={addNew} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold transition-colors" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e' }}>
+                <i className="fas fa-plus mr-1.5" />New Song
+              </button>
+            )}
           </div>
         </div>
       )}

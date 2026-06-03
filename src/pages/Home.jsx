@@ -24,13 +24,16 @@ export default function Home() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const logoClicksRef = useRef([]);
+  const [logoActivated, setLogoActivated] = useState(false);
 
   function handleLogoClick() {
+    if (logoActivated) return;
     const now = Date.now();
     logoClicksRef.current = [...logoClicksRef.current, now].filter(t => now - t < 10000);
-    if (logoClicksRef.current.length >= 20) {
+    if (logoClicksRef.current.length >= 10) {
       logoClicksRef.current = [];
-      navigate('/admin');
+      setLogoActivated(true);
+      setTimeout(() => navigate('/admin'), 1500);
     }
   }
 
@@ -250,7 +253,13 @@ export default function Home() {
           <source src="/videos/hero-mobile-brightside.mp4" type="video/mp4" />
         </video>
         <div className="hero-content">
-          <img src="/images/logo-color.png" alt="Ultraphonics Logo" className="logo" onClick={handleLogoClick} style={{ cursor: 'default' }} />
+          <img
+            src="/images/logo-color.png"
+            alt="Ultraphonics Logo"
+            className={`logo${logoActivated ? ' logo-easter-egg' : ''}`}
+            onClick={handleLogoClick}
+            style={{ cursor: 'default' }}
+          />
           <h1 className="band-name">Ultraphonics</h1>
           <h2 className="tagline">High-Energy Live Band for Events, Weddings &amp; Bars</h2>
           <h3 className="genres">Rock • Pop • Country • Soul</h3>

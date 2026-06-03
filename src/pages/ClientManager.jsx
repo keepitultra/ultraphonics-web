@@ -219,7 +219,16 @@ function ClientManager() {
   const rightPanel = (
     <div className="flex flex-col overflow-hidden bg-[#121212]">
       {!selectedClientId && (
-        <EmptyState icon="fa-address-book" message="Select a client to view details" />
+        <div className="flex-1 flex items-center justify-center h-full">
+          <div className="text-center">
+            <p className="text-base font-bold mb-5" style={{ color: '#00ddde' }}>Clients</p>
+            <i className="fas fa-address-book text-5xl mb-4 block opacity-20 text-[#555]" />
+            <p className="text-sm text-[#555]">Select a client to view details</p>
+            <button onClick={() => setClientFormOpen(true)} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold transition-colors" style={{ background: 'rgba(0,221,222,0.08)', border: '1px solid rgba(0,221,222,0.25)', color: '#00ddde' }}>
+              <i className="fas fa-plus mr-1.5" />New Client
+            </button>
+          </div>
+        </div>
       )}
 
       {selectedClientId && selectedClient && (

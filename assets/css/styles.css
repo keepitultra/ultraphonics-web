@@ -1,5 +1,18 @@
 /* Google Fonts loaded via index.css and index.html */
 
+@keyframes logo-easter-egg {
+  0%   { transform: scale(1)    rotate(0deg);   filter: drop-shadow(0 0 0px #00ddde); }
+  20%  { transform: scale(1.15) rotate(-8deg);  filter: drop-shadow(0 0 18px #00ddde); }
+  40%  { transform: scale(1.15) rotate(8deg);   filter: drop-shadow(0 0 28px #00ddde); }
+  60%  { transform: scale(1.1)  rotate(-5deg);  filter: drop-shadow(0 0 20px #00ddde); }
+  80%  { transform: scale(1.1)  rotate(5deg);   filter: drop-shadow(0 0 14px #00ddde); }
+  100% { transform: scale(1.2)  rotate(0deg);   filter: drop-shadow(0 0 32px #00ddde); opacity: 0; }
+}
+.logo-easter-egg {
+  animation: logo-easter-egg 1.5s ease-in-out forwards;
+  pointer-events: none;
+}
+
 :root {
   --color-background: #1a1a1a;
   --color-background-dark: #121212;

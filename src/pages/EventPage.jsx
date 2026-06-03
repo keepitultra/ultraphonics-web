@@ -114,6 +114,7 @@ export default function EventPage() {
   const mapsLinkUrl = mapsQuery ? `https://maps.google.com/?q=${encodeURIComponent(mapsQuery)}` : null;
   const calUrl = buildGoogleCalUrl(show);
   const venueWebsite = client?.website;
+  const isPast = show.date ? parseLocalDateOnly(show.date) < new Date(new Date().toDateString()) : false;
 
   return (
     <div className="min-h-screen" style={{ color: '#e7e5e4' }}>
@@ -137,9 +138,15 @@ export default function EventPage() {
       {/* Content */}
       <div className="max-w-2xl mx-auto px-4 pb-12 space-y-8">
         {/* Title */}
-        <div>
+        <div className="text-center">
           <h1 className="text-3xl font-bold text-white">Ultraphonics Live</h1>
           <p className="text-stone-400 mt-1">at {venueText}</p>
+          {isPast && (
+            <p className="mt-6 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest rounded-full px-3 py-1" style={{ color: '#f59e0b', border: '1px solid rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.08)' }}>
+              <i className="fa-solid fa-clock-rotate-left text-[10px]" />
+              This event has passed
+            </p>
+          )}
         </div>
 
         {/* Event details card */}
@@ -148,7 +155,8 @@ export default function EventPage() {
           style={{ background: '#1c1917', border: '1px solid #292524' }}
         >
           {/* Date & Time row */}
-          <div className="grid gap-y-4" style={{ gridTemplateColumns: '1.25rem 1fr' , columnGap: '0.75rem' }}>
+          <div className="max-w-md mx-auto">
+          <div className="grid gap-y-4" style={{ gridTemplateColumns: '1.25rem 1fr', columnGap: '0.75rem' }}>
             <i className="fa-solid fa-calendar-days text-teal-400 mt-0.5 text-center" />
             <div>
               <p className="font-semibold text-white">{formatEventDate(show.date)}</p>
@@ -182,21 +190,24 @@ export default function EventPage() {
               </div>
             </>}
           </div>
+          </div>
         </div>
 
-        {/* Save to calendar */}
-        <a
-          href={calUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-3 rounded-xl px-5 py-4 font-semibold transition-colors"
-          style={{ background: '#1c1917', border: '1px solid #292524', color: '#e7e5e4' }}
-          onMouseOver={e => e.currentTarget.style.borderColor = '#14b8a6'}
-          onMouseOut={e => e.currentTarget.style.borderColor = '#292524'}
-        >
-          <i className="fa-solid fa-calendar-plus text-teal-400" />
-          Save to Calendar
-        </a>
+        {/* Save to calendar — hidden for past events */}
+        {!isPast && (
+          <a
+            href={calUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-3 rounded-xl px-5 py-4 font-semibold transition-colors"
+            style={{ background: '#1c1917', border: '1px solid #292524', color: '#e7e5e4' }}
+            onMouseOver={e => e.currentTarget.style.borderColor = '#14b8a6'}
+            onMouseOut={e => e.currentTarget.style.borderColor = '#292524'}
+          >
+            <i className="fa-solid fa-calendar-plus text-teal-400" />
+            Save to Calendar
+          </a>
+        )}
 
         {/* Facebook event link */}
         {show.eventLink && (
@@ -204,7 +215,7 @@ export default function EventPage() {
             href={show.eventLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3 rounded-xl px-5 py-4 font-semibold transition-colors"
+            className="flex items-center justify-center gap-3 rounded-xl px-5 py-4 font-semibold transition-colors"
             style={{ background: '#1877f2', color: '#fff' }}
           >
             <img src="/images/facebook-white.png" alt="" className="w-5 h-5 object-contain" />

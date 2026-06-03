@@ -456,7 +456,16 @@ function ShowManager() {
   const rightPanel = (
     <div className="flex flex-col overflow-hidden bg-[#121212]">
       {!selectedShowId && !showEditMode && (
-        <EmptyState icon="fa-calendar-days" message="Select a show or create a new one" />
+        <div className="flex-1 flex items-center justify-center h-full">
+          <div className="text-center">
+            <p className="text-base font-bold mb-5" style={{ color: '#a78bfa' }}>Shows</p>
+            <i className="fas fa-calendar-days text-5xl mb-4 block opacity-20 text-[#555]" />
+            <p className="text-sm text-[#555]">Select a show or create a new one</p>
+            <button onClick={openNewShow} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold transition-colors" style={{ background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', color: '#a78bfa' }}>
+              <i className="fas fa-plus mr-1.5" />New Show
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Edit form */}

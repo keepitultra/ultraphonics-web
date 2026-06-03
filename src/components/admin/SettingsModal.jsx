@@ -4,7 +4,7 @@ import { useAuth } from '../../firebase/AuthContext.jsx';
 export default function SettingsModal({ onClose }) {
   const { user, logout } = useAuth();
   const [ablesetIp, setAblesetIp] = useState(
-    localStorage.getItem('ableset_url') || 'http://192.168.1.243'
+    localStorage.getItem('ableset_url') || 'http://192.168.69.138'
   );
 
   function saveAblesetIp(val) {
@@ -31,9 +31,10 @@ export default function SettingsModal({ onClose }) {
         <div className="p-5 overflow-y-auto flex-1 space-y-5">
           {user && (
             <div className="p-3 bg-[#121212] rounded-lg flex items-center gap-3">
-              <div className="w-9 h-9 bg-[#008c8d] rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white">
-                {(user.displayName || user.email || '?')[0].toUpperCase()}
-              </div>
+              {user.photoURL
+                ? <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="w-9 h-9 rounded-full shrink-0 object-cover" />
+                : <div className="w-9 h-9 bg-[#008c8d] rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white">{(user.displayName || user.email || '?')[0].toUpperCase()}</div>
+              }
               <div className="min-w-0">
                 {user.displayName && <div className="text-white text-sm font-semibold truncate">{user.displayName}</div>}
                 <div className="text-[#888] text-xs truncate">{user.email}</div>

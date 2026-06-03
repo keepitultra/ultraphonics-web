@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { trackEvent } from '../analytics.js';
+import { parseLocalDateOnly } from '../utils.js';
 
 function formatDate(dateStr) {
   const date = new Date(dateStr);
@@ -20,6 +21,10 @@ export default function ShowCard({ show }) {
   const time = show.startTime?.replace(':00', '') || '';
   const linkText = `${venueText}, ${city}${state ? ', ' + state : ''}`;
 
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const showDate = show.date ? parseLocalDateOnly(show.date) : null;
+  const isPast = showDate && !isNaN(showDate) ? showDate < today : false;
+
   const handleClick = () => {
     trackEvent('view_show_details', {
       event_category: 'Schedule',
@@ -29,9 +34,14 @@ export default function ShowCard({ show }) {
   };
 
   return (
-    <div>
+    <div style={ isPast ? { opacity: 0.5 } : undefined }>
       {formattedDate} •{' '}
-      <Link to={`/events/${show.id}`} className="venue-link" onClick={handleClick}>
+      <Link
+        to={`/events/${show.id}`}
+        className="venue-link"
+        onClick={handleClick}
+        style={isPast ? { textDecoration: 'line-through', textDecorationThickness: '1px' } : undefined}
+      >
         {linkText}
       </Link>
       {time ? ` • ${time}` : ''}

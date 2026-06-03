@@ -50,7 +50,7 @@ function AdminDashboard() {
   const [activeTab, setActiveTab]   = useState('performance');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ablesetUrl, setAblesetUrl] = useState(
-    localStorage.getItem('ableset_url') || 'http://192.168.1.243'
+    localStorage.getItem('ableset_url') || 'http://192.168.69.138'
   );
   const { user } = useAuth();
 
@@ -62,7 +62,7 @@ function AdminDashboard() {
   const activeClientCount = clients.filter(c => c.status === 'Active').length;
 
   function handleSettingsClose() {
-    setAblesetUrl(localStorage.getItem('ableset_url') || 'http://192.168.1.243');
+    setAblesetUrl(localStorage.getItem('ableset_url') || 'http://192.168.69.138');
     setSettingsOpen(false);
   }
 
@@ -76,9 +76,8 @@ function AdminDashboard() {
       </div>
 
       {/* Navbar */}
-      <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a]">
-        <div className="max-w-xl mx-auto px-4">
-          <div className="flex items-center justify-between h-14">
+      <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a] px-4">
+        <div className="flex items-center justify-between h-14 max-w-5xl mx-auto">
             <div className="flex items-center gap-3">
               <img src="/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-8 w-8" />
               <span className="font-bold text-lg text-white">
@@ -108,14 +107,12 @@ function AdminDashboard() {
                 <i className="fas fa-arrow-right-from-bracket text-sm" />
               </a>
             </div>
-          </div>
         </div>
       </nav>
 
       {/* Tab bar */}
       <div className="shrink-0 bg-[#121212]/60 border-b border-[#2a2a2a]">
-        <div className="max-w-xl mx-auto px-4">
-          <div className="flex overflow-x-auto">
+        <div className="flex justify-center overflow-x-auto">
             {TABS.map(({ id, label, icon }) => (
               <button
                 key={id}
@@ -129,7 +126,6 @@ function AdminDashboard() {
                 <i className={`fas ${icon} mr-2 text-xs`} />{label}
               </button>
             ))}
-          </div>
         </div>
       </div>
 

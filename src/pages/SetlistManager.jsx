@@ -25,6 +25,11 @@ function isSetMarker(song) {
   return /^Set\s*\d/i.test(song.title || song.lastKnownName || '');
 }
 
+// Strip legacy bracket annotations e.g. "Set 1 [teal]" → "Set 1"
+function cleanSetName(name) {
+  return (name || '').replace(/\s*\[.*?\]/g, '').trim();
+}
+
 // Compute stats: "Set 1 (8) • Set 2 (9)"
 function generateStats(songs) {
   const sections = [];
@@ -32,7 +37,7 @@ function generateStats(songs) {
   for (const s of songs) {
     if (isSetMarker(s)) {
       if (current) sections.push(current);
-      current = { name: s.title || s.lastKnownName, count: 0 };
+      current = { name: cleanSetName(s.title || s.lastKnownName), count: 0 };
     } else if (current) {
       current.count++;
     }
@@ -411,8 +416,8 @@ export default function SetlistManager() {
 
   const rightPanel = (
     <div className="flex flex-col overflow-hidden bg-[#121212]">
-      {/* Header */}
-      <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2">
+      {/* Header — only shown when a setlist is loaded */}
+      {hasSetlist && <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2">
         {/* Name */}
         {editingName && user ? (
           <input
@@ -472,17 +477,18 @@ export default function SetlistManager() {
             )}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Setlist body */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {!hasSetlist && (
-          <div className="h-full flex items-center justify-center text-[#555]">
+          <div className="h-full flex items-center justify-center">
             <div className="text-center">
-              <i className="fas fa-list text-5xl mb-4 block opacity-20" />
-              <p className="text-sm">Select or create a setlist</p>
+              <p className="text-base font-bold mb-5" style={{ color: '#3b82f6' }}>Setlists</p>
+              <i className="fas fa-list text-5xl mb-4 block opacity-20 text-[#555]" />
+              <p className="text-sm text-[#555]">Select or create a setlist</p>
               {user && (
-                <button onClick={handleNew} className="mt-4 px-4 py-2 bg-[#1d4ed8]/20 border border-[#1d4ed8]/40 text-[#3b82f6] rounded-lg text-sm font-semibold hover:bg-[#1d4ed8]/30 transition-colors">
+                <button onClick={handleNew} className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold transition-colors" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#3b82f6' }}>
                   <i className="fas fa-plus mr-1.5" />New Setlist
                 </button>
               )}
@@ -511,13 +517,13 @@ export default function SetlistManager() {
                 <div
                   key={`${song.id}-${idx}`}
                   data-id={song.id}
-                  className="flex items-center gap-3 px-4 py-2.5 border-b border-[#2a2a2a] bg-[#1a1a1a] border-l-2 border-l-[#3b82f6]"
+                  className="flex items-center gap-3 px-4 py-2.5 border-b border-[#2a2a2a] bg-[#1a1a1a]"
                 >
                   {!viewMode && (
                     <i className="drag-handle fas fa-grip-vertical text-[#444] cursor-grab text-sm" />
                   )}
-                  <span className="flex-1 text-sm font-bold text-[#3b82f6] uppercase tracking-wide">
-                    {song.title || song.lastKnownName}
+                  <span className="flex-1 text-sm font-bold text-[#888] uppercase tracking-wide">
+                    {cleanSetName(song.title || song.lastKnownName)}
                   </span>
                   {!viewMode && user && (
                     <button onClick={() => removeFromSetlist(idx)} className="p-1.5 text-[#555] hover:text-red-400 transition-colors rounded">
@@ -532,31 +538,31 @@ export default function SetlistManager() {
               <div
                 key={`${song.id}-${idx}`}
                 data-id={song.id}
-                className="flex items-center gap-3 px-4 py-2.5 border-b border-[#2a2a2a] hover:bg-white/5 group"
+                className="grid items-center px-4 py-2.5 border-b border-[#2a2a2a] hover:bg-white/5 group"
+                style={{ gridTemplateColumns: !viewMode && user ? 'auto 1fr auto auto' : 'auto 1fr auto', gap: '0.75rem' }}
               >
                 {!viewMode && (
-                  <i className="drag-handle fas fa-grip-vertical text-[#444] cursor-grab text-sm shrink-0" />
+                  <i className="drag-handle fas fa-grip-vertical text-[#444] cursor-grab text-sm" />
                 )}
 
                 {viewMode ? (
                   <Link
                     to={`/songs?id=${song.id}&back=${encodeURIComponent(`/setlists?id=${selectedId}`)}`}
-                    className="flex-1 min-w-0 text-sm text-white hover:text-[#3b82f6] transition-colors truncate font-medium"
+                    className="min-w-0 text-sm text-white hover:text-[#3b82f6] transition-colors truncate font-medium"
                   >
                     {song.title || song.lastKnownName}
                   </Link>
                 ) : (
-                  <span className="flex-1 min-w-0 text-sm text-white truncate font-medium">
+                  <span className="min-w-0 text-sm text-white truncate font-medium">
                     {song.title || song.lastKnownName}
                   </span>
                 )}
 
                 {/* Indicators */}
-                <div className="shrink-0 flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 justify-end">
                   {vocalist && (
                     <MemberAvatar name={vocalist} profiles={memberProfiles} color={vocalistColor} size={20} />
                   )}
-                  {/* Find song in allSongs for badges */}
                   {(() => {
                     const s = allSongs.find(x => x.id === song.id);
                     if (!s) return null;
@@ -572,7 +578,7 @@ export default function SetlistManager() {
                 </div>
 
                 {!viewMode && user && (
-                  <div className="shrink-0 flex items-center gap-1">
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => setPropsModalSong({ song, idx })}
                       className="p-1.5 text-[#555] hover:text-white transition-colors rounded"
