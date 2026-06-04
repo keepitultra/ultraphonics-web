@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useShow } from '../firebase/useFirestore.js';
 import { getClientDetails } from '../firestore-service.js';
-import { parseLocalDateOnly, parseTimeToHM, formatCityState } from '../utils.js';
+import { parseLocalDateOnly, parseTimeToHM, formatCityState, toIsoWithTz, dateToIsoWithLocalTz, firstUrl } from '../utils.js';
+import Footer from '../components/Footer.jsx';
+
+const SITE = 'https://www.ultraphonicsmusic.com/';
 
 const MAPS_EMBED_BASE = 'https://maps.google.com/maps';
 
@@ -84,6 +87,106 @@ export default function EventPage() {
     }
   }, [show?.clientId]);
 
+  // Dynamic meta tags — update <head> when show loads, restore on unmount
+  useEffect(() => {
+    if (!show) return;
+    const venueLabel = show.venue?.trim() || 'TBD';
+    const cityState = formatCityState(show.city, show.state);
+    const title = `Ultraphonics at ${venueLabel} – ${formatEventDate(show.date)}`;
+    const description = show.description ||
+      `Live performance by Ultraphonics at ${venueLabel}${cityState ? ' in ' + cityState : ''}.`;
+    const url = `${SITE}events/${show.id}`;
+    const image = show.image || `${SITE}images/logo-share.png`;
+
+    const prevTitle = document.title;
+    document.title = title;
+
+    const metaMap = {
+      'og:title': ['property', title],
+      'og:description': ['property', description],
+      'og:url': ['property', url],
+      'og:image': ['property', image],
+      'og:type': ['property', 'website'],
+      'twitter:title': ['name', title],
+      'twitter:description': ['name', description],
+      'description': ['name', description],
+    };
+    const prev = {};
+    for (const [key, [attr, content]] of Object.entries(metaMap)) {
+      const el = document.querySelector(`meta[${attr}="${key}"]`);
+      if (el) { prev[key] = el.getAttribute('content'); el.setAttribute('content', content); }
+    }
+    return () => {
+      document.title = prevTitle;
+      for (const [key, [attr]] of Object.entries(metaMap)) {
+        const el = document.querySelector(`meta[${attr}="${key}"]`);
+        if (el && prev[key] != null) el.setAttribute('content', prev[key]);
+      }
+    };
+  }, [show]);
+
+  // JSON-LD Event schema for Google rich results
+  useEffect(() => {
+    if (!show) return;
+    const venueLabel = show.venue?.trim() || 'Venue TBD';
+    const cityState = formatCityState(show.city, show.state);
+    const startDateIso = toIsoWithTz(show.date, show.startTime);
+    if (!startDateIso) return;
+    let endDateIso;
+    if (show.endTime) {
+      const base = parseLocalDateOnly(show.date);
+      const { hours: eh, minutes: em } = parseTimeToHM(show.endTime);
+      const { hours: sh, minutes: sm } = parseTimeToHM(show.startTime);
+      const endBase = new Date(base.getTime());
+      endBase.setHours(eh, em, 0, 0);
+      if (endBase <= new Date(base.getFullYear(), base.getMonth(), base.getDate(), sh, sm, 0, 0)) {
+        endBase.setDate(endBase.getDate() + 1);
+      }
+      endDateIso = dateToIsoWithLocalTz(endBase);
+    }
+    const address = { '@type': 'PostalAddress', addressCountry: 'US' };
+    if (show.streetAddress) address.streetAddress = show.streetAddress;
+    if (show.city) address.addressLocality = show.city;
+    if (show.state) address.addressRegion = show.state;
+    if (show.postalCode) address.postalCode = show.postalCode;
+    const description = show.description ||
+      (cityState ? `Live performance by Ultraphonics at ${venueLabel} in ${cityState}.`
+                 : `Live performance by Ultraphonics at ${venueLabel}.`);
+    const offerUrl = firstUrl(show.ticketUrl, show.eventLink);
+    const hasPrice = typeof show.price === 'number';
+    const offers = (offerUrl || hasPrice) ? {
+      '@type': 'Offer',
+      url: offerUrl || `${SITE}events/${show.id}`,
+      ...(hasPrice ? { price: show.price } : {}),
+      priceCurrency: show.currency || 'USD',
+      availability: 'https://schema.org/InStock',
+    } : undefined;
+    const ld = {
+      '@context': 'https://schema.org',
+      '@type': 'Event',
+      name: `Ultraphonics at ${venueLabel}`,
+      eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+      eventStatus: 'https://schema.org/EventScheduled',
+      startDate: startDateIso,
+      ...(endDateIso ? { endDate: endDateIso } : {}),
+      location: { '@type': 'Place', name: venueLabel, address },
+      image: show.image || `${SITE}images/logo-share.png`,
+      description,
+      organizer: { '@type': 'Organization', name: show.venue || 'Ultraphonics' },
+      performer: { '@type': 'MusicGroup', name: 'Ultraphonics', url: SITE },
+      url: `${SITE}events/${show.id}`,
+      ...(offers ? { offers } : {}),
+    };
+    const existing = document.getElementById('ld-json-event-page');
+    if (existing) existing.remove();
+    const script = document.createElement('script');
+    script.id = 'ld-json-event-page';
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(ld);
+    document.head.appendChild(script);
+    return () => document.getElementById('ld-json-event-page')?.remove();
+  }, [show]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#0c0a09' }}>
@@ -155,7 +258,6 @@ export default function EventPage() {
           style={{ background: '#1c1917', border: '1px solid #292524' }}
         >
           {/* Date & Time row */}
-          <div className="max-w-md mx-auto">
           <div className="grid gap-y-4" style={{ gridTemplateColumns: '1.25rem 1fr', columnGap: '0.75rem' }}>
             <i className="fa-solid fa-calendar-days text-teal-400 mt-0.5 text-center" />
             <div>
@@ -189,7 +291,6 @@ export default function EventPage() {
                 <p className="text-stone-300 text-sm leading-relaxed whitespace-pre-line">{show.description}</p>
               </div>
             </>}
-          </div>
           </div>
         </div>
 
@@ -265,6 +366,7 @@ export default function EventPage() {
         )}
 
       </div>
+      <Footer />
     </div>
   );
 }

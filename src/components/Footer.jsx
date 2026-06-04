@@ -11,7 +11,7 @@ export default function Footer() {
         </Link>
         <br /><br />
         <p>&copy; {year} Ultraphonics, LLC</p>
-        <p>Web Design by Tom Hickman</p>
+        <p>Web Design by <a href="https://github.com/tdhckmn" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Tom Hickman</a></p>
       </div>
     </footer>
   );

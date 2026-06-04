@@ -97,10 +97,14 @@ export default function SetlistManager() {
   const allSongsRef = useRef(allSongs);
   useEffect(() => { allSongsRef.current = allSongs; }, [allSongs]);
 
-  // Load setlist when selectedId changes
+  // Load setlist when selectedId changes OR when setlists data first arrives
   const selected = setlists.find(s => s.id === selectedId);
+  const loadedIdRef = useRef(null);
   useEffect(() => {
     if (!selected) return;
+    // Already loaded this exact setlist — don't reload (avoids wiping edits on re-render)
+    if (loadedIdRef.current === selected.id) return;
+    loadedIdRef.current = selected.id;
     if (isDirty && !window.confirm('Load a new setlist? Unsaved changes will be lost.')) return;
     setSetlistSongs(selected.songs || []);
     setSetlistName(selected.name || '');
@@ -108,7 +112,7 @@ export default function SetlistManager() {
     setSegues(selected.segues || {});
     setViewMode(true);
     setIsDirty(false);
-  }, [selectedId]);
+  }, [selectedId, selected]);
 
   // Trigger new setlist from Quick Launch
   useEffect(() => {
