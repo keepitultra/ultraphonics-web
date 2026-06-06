@@ -6,6 +6,7 @@ import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import { useShows, useSetlists, useClients, useMemberProfiles } from '../firebase/useFirestore.js';
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import { saveShow, deleteShow } from '../firestore-service.js';
+import { slugify, makeUniqueSlug } from '../utils.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const PERSONNEL = ['Anthony', 'Tom', 'Lester', 'David', 'Shelley', 'Kelsey'];
@@ -340,10 +341,17 @@ function ShowManager() {
     if (!showForm.date) { alert('Date is required.'); return; }
     setSavingShow(true);
     try {
-      await saveShow({ ...showForm, updatedAt: new Date().toISOString() });
+      // On first save of a new show, swap the temp UUID for a slug based on venue + date
+      const isNew = !allShows.find(s => s.id === showForm.id);
+      let saveId = showForm.id;
+      if (isNew) {
+        const base = [showForm.venue, showForm.date].filter(Boolean).join('-');
+        saveId = makeUniqueSlug(base || 'show', new Set(allShows.map(s => s.id)));
+      }
+      await saveShow({ ...showForm, id: saveId, updatedAt: new Date().toISOString() });
       setShowEditMode(false);
       setShowDirty(false);
-      setSearchParams({ show: showForm.id }, { replace: true });
+      setSearchParams({ show: saveId }, { replace: true });
     } catch (err) { alert('Save failed: ' + err.message); }
     finally { setSavingShow(false); }
   }
@@ -500,12 +508,12 @@ function ShowManager() {
       {!showEditMode && selectedShowId && selectedShow && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-base font-bold text-white truncate">
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <h2 className="text-base font-bold text-white text-left truncate w-full">
                 {[selectedShow.venue, formatDate(selectedShow.date)].filter(Boolean).join(', ') || 'Unnamed Show'}
               </h2>
               {selectedShow.personnel?.length > 0 && (
-                <div className="flex items-center gap-1 mt-1.5">
+                <div className="flex items-center justify-start gap-1 mt-1.5 flex-wrap">
                   {selectedShow.personnel.map(p => <MemberAvatar key={p} name={p} profiles={memberProfiles} color={PERSONNEL_COLORS[p] || '#888'} size={24} />)}
                 </div>
               )}
@@ -523,7 +531,21 @@ function ShowManager() {
           <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
             <div className="max-w-xl mx-auto space-y-4">
               {/* Action buttons */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className={`grid gap-2`} style={{ gridTemplateColumns: selectedShow.published && !selectedShow.isPrivate ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)' }}>
+                {selectedShow.published && !selectedShow.isPrivate && (
+                  <a
+                    href={`/events/${selectedShow.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col items-center gap-1.5 py-3 rounded-xl text-xs font-semibold transition-colors"
+                    style={{ background: '#1c1917', border: '1px solid #292524', color: '#ccc' }}
+                    onMouseOver={e => e.currentTarget.style.borderColor = '#a78bfa'}
+                    onMouseOut={e => e.currentTarget.style.borderColor = '#292524'}
+                  >
+                    <i className="fas fa-globe text-[#a78bfa] text-base" />
+                    Event Page
+                  </a>
+                )}
                 <button
                   onClick={() => openGoogleCalendar(selectedShow)}
                   className="flex flex-col items-center gap-1.5 py-3 rounded-xl text-xs font-semibold transition-colors"
@@ -646,43 +668,45 @@ function ShowDetail({ show, clients, setlists, memberProfiles = {}, onPublish })
         })()}
       </Card>
 
-      {(show.published && !show.isPrivate || show.eventLink || setlist || show.eventHandler) && (
-        <Card title="Details">
-          {show.published && !show.isPrivate && (
-            <InfoRow label="Public Page">
-              <a href={`/events/${show.id}`} target="_blank" rel="noopener noreferrer" className="text-[#a78bfa] hover:underline">
-                View public event page <i className="fas fa-external-link-alt text-[10px] ml-1" />
-              </a>
-            </InfoRow>
-          )}
-          {show.eventLink && <InfoRow label="Event Link"><a href={show.eventLink} target="_blank" rel="noopener noreferrer" className="text-[#a78bfa] hover:underline truncate">{show.eventLink}</a></InfoRow>}
-          {setlist && <InfoRow label="Setlist"><a href={`/setlists?id=${show.setlistId}`} className="text-[#a78bfa] hover:underline">{setlist.name}</a></InfoRow>}
-          {show.eventHandler && <InfoRow label="Handler" value={show.eventHandler} />}
+      {setlist && (
+        <Card title="Setlist">
+          <div className="flex justify-center">
+            <a href={`/setlists?id=${show.setlistId}`} className="flex items-center gap-2 text-[#a78bfa] hover:underline text-sm font-semibold">
+              <i className="fas fa-list text-xs" />
+              {setlist.name}
+            </a>
+          </div>
         </Card>
       )}
 
-      {show.personnel?.length > 0 && (
+      {(show.personnel?.length > 0 || show.eventHandler) && (
         <Card title="Personnel">
           <div className="flex flex-wrap justify-center gap-2">
-            {show.personnel.map(p => (
+            {show.personnel?.map(p => (
               <div key={p} className="flex items-center gap-1.5">
                 <MemberAvatar name={p} profiles={memberProfiles} color={PERSONNEL_COLORS[p] || '#888'} size={28} />
                 <span className="text-sm text-[#ccc]">{p}</span>
               </div>
             ))}
           </div>
+          {show.eventHandler && (
+            <div className="mt-2 pt-2 border-t border-[#2a2a2a] flex justify-center">
+              <span className="text-xs text-[#555] mr-2">Handler</span>
+              <span className="text-xs text-[#ccc]">{show.eventHandler}</span>
+            </div>
+          )}
         </Card>
       )}
 
       {show.itinerary && (
         <Card title="Itinerary">
-          <pre className="text-xs text-[#ccc] whitespace-pre-wrap font-sans">{show.itinerary}</pre>
+          <pre className="text-sm text-[#ccc] whitespace-pre-wrap font-sans">{show.itinerary}</pre>
         </Card>
       )}
 
       {show.notes && (
         <Card title="Notes">
-          <pre className="text-xs text-[#ccc] whitespace-pre-wrap font-sans">{show.notes}</pre>
+          <pre className="text-sm text-[#ccc] whitespace-pre-wrap font-sans">{show.notes}</pre>
         </Card>
       )}
 
@@ -746,6 +770,14 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
 
   return (
     <div className="space-y-4 max-w-xl pb-8">
+      <div className="flex flex-wrap items-center gap-5 pb-1">
+        <CheckboxField label="Published on Website" checked={!!form.published} onChange={v => setField('published', v)} />
+        <CheckboxField label="Private Event" checked={!!form.isPrivate} onChange={v => setField('isPrivate', v)} />
+        <div className="flex items-center gap-2 ml-auto">
+          <label className="text-xs font-semibold text-[#888] uppercase tracking-wider whitespace-nowrap">Payout ($)</label>
+          <input type="number" value={form.payout || ''} onChange={e => setField('payout', e.target.value)} className={INPUT} placeholder="0" style={{ width: 100 }} />
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <FormField label="Date *">
           <input type="date" value={form.date || ''} onChange={e => setField('date', e.target.value)} className={INPUT} />
@@ -755,6 +787,12 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
             <option value="">— Select client —</option>
             {activeClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+        </FormField>
+        <FormField label="Start Time">
+          <input type="time" value={toTimeInputValue(form.startTime)} onChange={e => setField('startTime', fromTimeInputValue(e.target.value))} className={INPUT} />
+        </FormField>
+        <FormField label="End Time">
+          <input type="time" value={toTimeInputValue(form.endTime)} onChange={e => setField('endTime', fromTimeInputValue(e.target.value))} className={INPUT} />
         </FormField>
       </div>
       <FormField label="Venue Name">
@@ -772,14 +810,6 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
         </FormField>
         <FormField label="Zip">
           <input type="text" value={selectedClient?.postalCode || form.postalCode || ''} readOnly className={READONLY_INPUT} />
-        </FormField>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <FormField label="Start Time">
-          <input type="time" value={toTimeInputValue(form.startTime)} onChange={e => setField('startTime', fromTimeInputValue(e.target.value))} className={INPUT} />
-        </FormField>
-        <FormField label="End Time">
-          <input type="time" value={toTimeInputValue(form.endTime)} onChange={e => setField('endTime', fromTimeInputValue(e.target.value))} className={INPUT} />
         </FormField>
       </div>
       <FormField label="Public Description">
@@ -880,13 +910,6 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
           {PERSONNEL.map(p => <option key={p}>{p}</option>)}
         </select>
       </FormField>
-      <FormField label="Base Payout ($)">
-        <input type="number" value={form.payout || ''} onChange={e => setField('payout', e.target.value)} className={INPUT} placeholder="0" style={{ maxWidth: 160 }} />
-      </FormField>
-      <div className="flex flex-wrap gap-5 pt-1">
-        <CheckboxField label="Private Event" checked={!!form.isPrivate} onChange={v => setField('isPrivate', v)} />
-        <CheckboxField label="Published on Website" checked={!!form.published} onChange={v => setField('published', v)} />
-      </div>
     </div>
   );
 }

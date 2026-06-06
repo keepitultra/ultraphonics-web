@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { slugify, makeUniqueSlug } from '../utils.js';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import Sortable from 'sortablejs';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
@@ -219,8 +220,17 @@ export default function SetlistManager() {
     if (!setlistName.trim()) { alert('Setlist name is required.'); return; }
     setSaving(true);
     try {
-      await saveSetlist(selectedId, setlistName, setlistSongs, { vocalAssignments, segues });
+      // On first save of a new setlist, swap the temp UUID for a name-based slug
+      const isNew = !setlists.find(s => s.id === selectedId);
+      const saveId = isNew
+        ? makeUniqueSlug(setlistName, new Set(setlists.map(s => s.id)))
+        : selectedId;
+      await saveSetlist(saveId, setlistName, setlistSongs, { vocalAssignments, segues });
       setIsDirty(false);
+      if (saveId !== selectedId) {
+        loadedIdRef.current = saveId;
+        setSearchParams({ id: saveId }, { replace: true });
+      }
     } catch (err) { alert('Save failed: ' + err.message); }
     finally { setSaving(false); }
   }

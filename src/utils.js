@@ -56,6 +56,25 @@ export function firstUrl(...candidates) {
     return candidates.find(u => typeof u === "string" && u.trim().length > 0);
 }
 
+// --- Slug Helpers ---
+
+export function slugify(str) {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
+    .replace(/[^a-z0-9\s-]/g, '')                     // keep alphanum, spaces, hyphens
+    .trim()
+    .replace(/[\s-]+/g, '-');                          // collapse spaces/hyphens
+}
+
+export function makeUniqueSlug(base, existingIds) {
+  const slug = slugify(base);
+  if (!existingIds.has(slug)) return slug;
+  let n = 2;
+  while (existingIds.has(`${slug}-${n}`)) n++;
+  return `${slug}-${n}`;
+}
+
 export function formatCityState(city, state) {
     const c = (city || "").trim();
     const s = (state || "").trim();

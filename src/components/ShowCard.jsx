@@ -1,6 +1,16 @@
 import { Link } from 'react-router-dom';
 import { trackEvent } from '../analytics.js';
-import { parseLocalDateOnly } from '../utils.js';
+import { parseLocalDateOnly, parseTimeToHM } from '../utils.js';
+
+function formatTime12(timeStr) {
+  if (!timeStr) return '';
+  const { hours, minutes, isAM, isPM } = parseTimeToHM(timeStr.trim());
+  if (isNaN(hours)) return '';
+  const usePM = isPM || (!isAM && hours >= 12);
+  const h = hours % 12 || 12;
+  const m = minutes === 0 ? '' : `:${String(minutes).padStart(2, '0')}`;
+  return `${h}${m} ${usePM ? 'PM' : 'AM'}`;
+}
 
 function formatDate(dateStr) {
   const date = new Date(dateStr);
@@ -18,7 +28,7 @@ export default function ShowCard({ show }) {
   const venueText = show.venue?.trim() || 'Venue TBD';
   const city = show.city || '';
   const state = show.state || '';
-  const time = show.startTime?.replace(':00', '') || '';
+  const time = formatTime12(show.startTime);
   const linkText = `${venueText}, ${city}${state ? ', ' + state : ''}`;
 
   const today = new Date(); today.setHours(0, 0, 0, 0);

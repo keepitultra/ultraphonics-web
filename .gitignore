@@ -40,4 +40,5 @@ dist-electron/
 *.zip
 *.exe
 *.AppImage
-*.deb
+*.debservice-account.json
+scripts/service-account.json
