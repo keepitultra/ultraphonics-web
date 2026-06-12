@@ -6,11 +6,15 @@ import { trackEvent } from '../analytics.js';
 
 const { tipping } = config;
 
+function toTitleCase(str) {
+  return str.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function SongRequest() {
   const [songs, setSongs] = useState([]);
   const [loadingError, setLoadingError] = useState(false);
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(/** @type {{id: string, title: string, artist?: string} | null} */(null));
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedTitle, setSubmittedTitle] = useState('');
@@ -32,17 +36,27 @@ export default function SongRequest() {
     );
   }, [query, songs]);
 
+  // When the search yields no matches, allow submitting the typed text as a free request
+  const freeTextTitle = !selected && filtered.length === 0 && query.trim()
+    ? toTitleCase(query)
+    : null;
+
+  const submitTitle = selected ? selected.title : freeTextTitle;
+
   async function handleSubmit() {
-    if (!selected || submitting) return;
+    if (!submitTitle || submitting) return;
     setSubmitting(true);
     try {
-      await saveSongRequest(selected.title);
-      trackEvent('song_request_submit', { title: selected.title, source: 'catalog' });
-      setSubmittedTitle(selected.title);
+      await saveSongRequest(submitTitle);
+      trackEvent('song_request_submit', {
+        title: submitTitle,
+        source: selected ? 'catalog' : 'free_text',
+      });
+      setSubmittedTitle(submitTitle);
       setSubmitted(true);
     } catch (err) {
       console.error('Song request failed', err);
-      trackEvent('song_request_error', { title: selected.title });
+      trackEvent('song_request_error', { title: submitTitle });
     } finally {
       setSubmitting(false);
     }
@@ -190,8 +204,9 @@ export default function SongRequest() {
             <p className="text-stone-600 text-sm">Loading setlist…</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-stone-600 text-sm">
-            <p>No matches for "<span className="text-stone-400">{query}</span>"</p>
+          <div className="flex flex-col items-center justify-center h-40 text-center px-6">
+            <p className="text-stone-400 text-sm font-medium">Not in our setlist yet.</p>
+            <p className="text-stone-600 text-sm mt-1">Hit the button below to request it anyway!</p>
           </div>
         ) : (
           <ul className="px-4 pb-28 space-y-1.5">
@@ -239,19 +254,19 @@ export default function SongRequest() {
       <div className="shrink-0 px-4 pt-3 pb-8 border-t border-stone-900 bg-stone-950">
         <button
           onClick={handleSubmit}
-          disabled={!selected || submitting}
+          disabled={!submitTitle || submitting}
           className="w-full py-4 rounded-2xl font-bold text-lg transition-all"
           style={{
-            background: selected ? '#14b8a6' : '#1a1a1a',
-            color: selected ? '#0f172a' : '#444',
-            border: selected ? 'none' : '1px solid #2a2a2a',
-            cursor: selected ? 'pointer' : 'default',
+            background: submitTitle ? '#14b8a6' : '#1a1a1a',
+            color: submitTitle ? '#0f172a' : '#444',
+            border: submitTitle ? 'none' : '1px solid #2a2a2a',
+            cursor: submitTitle ? 'pointer' : 'default',
           }}
         >
           {submitting
             ? 'Sending…'
-            : selected
-              ? `Request "${selected.title}"`
+            : submitTitle
+              ? `Request "${submitTitle}"`
               : 'Select a song above'}
         </button>
       </div>
