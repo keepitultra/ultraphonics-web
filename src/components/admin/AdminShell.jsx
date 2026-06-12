@@ -39,7 +39,7 @@ const APPS = [
   { id: 'songs',     label: 'Songs',     path: '/songs',     icon: 'fa-music',          color: '#22c55e' },
   { id: 'clients',   label: 'Clients',   path: '/clients',   icon: 'fa-address-book',   color: '#00ddde' },
   { id: 'shows',     label: 'Shows',     path: '/shows',     icon: 'fa-calendar-days',  color: '#a78bfa' },
-  { id: 'requests',  label: 'Requests',  path: '/requests',  icon: 'fa-hand-point-up',  color: '#14b8a6' },
+  { id: 'requests',  label: 'Requests',  path: '/requests',  icon: 'fa-hand-point-up',  color: '#f59e0b' },
 ];
 
 /** @param {{ activeApp: string, children: import('react').ReactNode }} props */

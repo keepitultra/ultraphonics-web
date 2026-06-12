@@ -97,6 +97,10 @@ export default function Contact() {
               <img src="/images/facebook-white.png" alt="Facebook" className="button-logo" />
               Message us on Facebook
             </a>
+            <Link to="/request" className="contact-link-item">
+              <i className="fas fa-hand-point-up" style={{ width: '24px', textAlign: 'center', fontSize: '1.1rem' }} />
+              Request a song
+            </Link>
           </div>
         </div>
       </div>

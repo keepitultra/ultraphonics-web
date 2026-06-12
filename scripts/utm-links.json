@@ -1,0 +1,93 @@
+{
+  "_comment": "Ultraphonics campaign link registry. Run: node scripts/utm-architect.mjs check-all",
+  "_issues_key": "needs_rebuild = update tiny.cc destination URL to fix; ga4_trackable = false means GA4 gets no data",
+  "links": [
+    {
+      "name": "Gig Banner",
+      "url": "https://tiny.cc/ultraphonics",
+      "campaign": "gig_banner",
+      "medium": "offline",
+      "destination": "https://ultraphonicsmusic.com/?utm_source=qr_code&utm_medium=offline&utm_campaign=gig_banner",
+      "status": "ok"
+    },
+    {
+      "name": "Koozie",
+      "url": "https://tiny.cc/okqv001",
+      "campaign": "koozie",
+      "medium": "offline",
+      "destination": "https://ultraphonicsmusic.com/?utm_source=qr_code&utm_medium=offline&utm_campaign=koozie",
+      "status": "ok"
+    },
+    {
+      "name": "Ultrasheet (Google Sheets)",
+      "url": "https://tiny.cc/ultrasheet",
+      "campaign": null,
+      "medium": null,
+      "destination": "https://docs.google.com/spreadsheets/d/1csJb56jnisEb_37pYMVTOY6kSt6J-HqN5X7IYYRgH20/edit",
+      "ga4_trackable": false,
+      "status": "skip",
+      "_note": "Destination is Google Docs — GA4 cannot track a page_view there. No UTM params needed. Excluded from check-all."
+    },
+    {
+      "name": "Business Card",
+      "url": "https://tiny.cc/33xv001",
+      "campaign": "business_card",
+      "medium": "offline",
+      "destination": "https://ultraphonicsmusic.com/?utm_source=qr_code&utm_medium=offline&utm_campaign=business_card",
+      "status": "ok"
+    },
+    {
+      "name": "2026 Survey Post (Facebook)",
+      "url": "https://tiny.cc/ultra-survey-2026",
+      "campaign": "2026_survey_post",
+      "medium": "social",
+      "destination": "https://www.ultraphonicsmusic.com/?utm_source=facebook&utm_medium=social&utm_campaign=2026_survey_post",
+      "status": "needs_rebuild",
+      "_note": "www. prefix will cause GA4 hostname fragmentation. Rebuild destination with ultraphonicsmusic.com (no www). Also consider renaming to campaign=fan_engagement&content=2026_survey."
+    },
+    {
+      "name": "24K Magic YouTube Video",
+      "url": "https://tiny.cc/94nw001",
+      "campaign": "24k_magic_10_17",
+      "medium": "social",
+      "destination": "https://ultraphonicsmusic.com/?utm_source=youtube&utm_medium=social&utm_campaign=24k_magic_10_17",
+      "status": "needs_rebuild",
+      "_note": "Song name + date in utm_campaign creates a new GA4 campaign for every video. Rebuild as campaign=youtube_content&content=24k_magic so all YouTube videos roll up into one campaign."
+    },
+    {
+      "name": "Facebook Cover Photo",
+      "url": "https://tiny.cc/j6nw001",
+      "campaign": "cover_photo",
+      "medium": "social",
+      "destination": "https://www.ultraphonicsmusic.com/?utm_source=facebook&utm_medium=social&utm_campaign=cover_photo",
+      "status": "needs_rebuild",
+      "_note": "www. prefix issue. Also consider renaming to campaign=profile_optimization&content=cover_photo for consistency."
+    },
+    {
+      "name": "Weddings Facebook Post",
+      "url": "https://tiny.cc/ojnw001",
+      "campaign": "weddings",
+      "medium": "social",
+      "destination": "https://www.ultraphonicsmusic.com/?utm_source=facebook&utm_medium=social&utm_campaign=weddings",
+      "status": "needs_rebuild",
+      "_note": "www. prefix issue. Campaign name 'weddings' conflicts with 'weddings_flyer' (offline) — same objective, split GA4 data. Rebuild as campaign=wedding_booking&content=fb_post."
+    },
+    {
+      "name": "Book Us CTA (Facebook)",
+      "url": "https://tiny.cc/pfzw001",
+      "campaign": "book_us_for_your_next_event",
+      "medium": "social",
+      "destination": "https://www.ultraphonicsmusic.com/quote?utm_source=facebook&utm_medium=social&utm_campaign=book_us_for_your_next_event",
+      "status": "needs_rebuild",
+      "_note": "www. prefix issue. Campaign name is too verbose and a sentence — will be truncated in GA4 UI. Same objective as 'weddings' and 'weddings_flyer'. Rebuild as campaign=wedding_booking&content=book_us_cta."
+    },
+    {
+      "name": "Weddings Flyer QR",
+      "url": "https://tiny.cc/4z5x001",
+      "campaign": "weddings_flyer",
+      "medium": "offline",
+      "destination": "https://ultraphonicsmusic.com/quote?utm_source=qr_code&utm_medium=offline&utm_campaign=weddings_flyer",
+      "status": "ok"
+    }
+  ]
+}

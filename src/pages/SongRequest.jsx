@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { config } from '../config.js';
 import { saveSongRequest, getWebsiteSongs } from '../firestore-service.js';
 import { trackEvent } from '../analytics.js';
+import { GENRE_COLORS, genreLabel } from '../utils/genre.js';
 
 const { tipping } = config;
 
@@ -234,11 +235,15 @@ export default function SongRequest() {
                         <p className="text-stone-500 text-sm truncate mt-0.5">{song.artist}</p>
                       )}
                     </div>
-                    {song.genre && !isSelected && (
-                      <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full text-stone-500 bg-stone-800 border border-stone-700 whitespace-nowrap">
-                        {song.genre}
-                      </span>
-                    )}
+                    {song.genre && !isSelected && (() => {
+                      const label = genreLabel(song);
+                      const colors = GENRE_COLORS[label] || GENRE_COLORS.Other;
+                      return (
+                        <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                     {isSelected && (
                       <i className="fas fa-circle-check shrink-0 text-teal-400 text-lg" />
                     )}

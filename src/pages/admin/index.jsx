@@ -19,7 +19,7 @@ function AppTile({ to, href, color, icon, title, subtitle }) {
       <i className="fas fa-arrow-right absolute bottom-4 right-4 text-[#333] group-hover:text-[#555] transition-colors text-xs" />
     </div>
   );
-  if (to)   return <Link to={to} className="block">{body}</Link>;
+  if (to) return <Link to={to} className="block">{body}</Link>;
   return <a href={href} target="_blank" rel="noopener noreferrer" className="block">{body}</a>;
 }
 
@@ -38,16 +38,12 @@ function LinkRow({ href, to, icon, label }) {
   return <Link to={to} className={cls}>{ico}{label}</Link>;
 }
 
-// ── Tabs ─────────────────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'performance', label: 'Performance', icon: 'fa-music' },
-  { id: 'booking',     label: 'Booking',     icon: 'fa-address-book' },
-  { id: 'tools',       label: 'Tools',       icon: 'fa-toolbox' },
-];
+function SectionHeading({ label }) {
+  return <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-2">{label}</p>;
+}
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 function AdminDashboard() {
-  const [activeTab, setActiveTab]   = useState('performance');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ablesetUrl, setAblesetUrl] = useState(
     localStorage.getItem('ableset_url') || 'http://192.168.69.138'
@@ -58,7 +54,7 @@ function AdminDashboard() {
   const { data: songs    = [] } = useSongs();
   const { data: clients  = [] } = useClients();
 
-  const firstName        = user?.displayName?.split(' ')[0] || null;
+  const firstName         = user?.displayName?.split(' ')[0] || null;
   const activeClientCount = clients.filter(c => c.status === 'Active').length;
 
   function handleSettingsClose() {
@@ -68,7 +64,7 @@ function AdminDashboard() {
 
   return (
     <div className="h-screen flex flex-col text-white overflow-hidden">
-      {/* Ambient orbs — same as public pages */}
+      {/* Ambient orbs */}
       <div style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none', overflow: 'hidden' }} aria-hidden="true">
         <div className="hero-orb hero-orb-1" />
         <div className="hero-orb hero-orb-2" />
@@ -78,64 +74,45 @@ function AdminDashboard() {
       {/* Navbar */}
       <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a] px-4">
         <div className="flex items-center justify-between h-14 max-w-5xl mx-auto">
-            <div className="flex items-center gap-3">
-              <img src="/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-8 w-8" />
-              <span className="font-bold text-lg text-white">
-                {firstName ? `Hey, ${firstName}!` : 'Admin'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <a
-                href="https://discord.com/channels/1450501228462215208"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
-              >
-                <i className="fab fa-discord text-sm" />
-              </a>
-              <button
-                onClick={() => setSettingsOpen(true)}
-                className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
-              >
-                <i className="fas fa-gear text-sm" />
-              </button>
-              <a
-                href={`/?qa=true&cachebust=${Date.now()}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[#888] hover:text-white text-sm rounded-lg hover:bg-white/5 transition-colors"
-              >
-                <span className="hidden sm:inline">View Site</span>
-                <i className="fas fa-arrow-right-from-bracket text-sm" />
-              </a>
-            </div>
+          <div className="flex items-center gap-3">
+            <img src="/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-8 w-8" />
+            <span className="font-bold text-lg text-white">
+              {firstName ? `Hey, ${firstName}!` : 'Admin'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <a
+              href="https://discord.com/channels/1450501228462215208"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+            >
+              <i className="fab fa-discord text-sm" />
+            </a>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+            >
+              <i className="fas fa-gear text-sm" />
+            </button>
+            <a
+              href={`/?qa=true&cachebust=${Date.now()}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[#888] hover:text-white text-sm rounded-lg hover:bg-white/5 transition-colors"
+            >
+              <span className="hidden sm:inline">View Site</span>
+              <i className="fas fa-arrow-right-from-bracket text-sm" />
+            </a>
+          </div>
         </div>
       </nav>
 
-      {/* Tab bar */}
-      <div className="shrink-0 bg-[#121212]/60 border-b border-[#2a2a2a]">
-        <div className="flex justify-center overflow-x-auto">
-            {TABS.map(({ id, label, icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`px-5 py-3.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
-                  activeTab === id
-                    ? 'border-[#00ddde] text-[#00ddde]'
-                    : 'border-transparent text-[#888] hover:text-white'
-                }`}
-              >
-                <i className={`fas ${icon} mr-2 text-xs`} />{label}
-              </button>
-            ))}
-        </div>
-      </div>
-
-      {/* Tab content */}
+      {/* Content */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-xl mx-auto px-4 pt-6 pb-8">
+        <div className="max-w-xl mx-auto px-4 pt-6 pb-8 space-y-8">
 
-          {/* ── Performance ──────────────────────────────────────────────── */}
-          {activeTab === 'performance' && (
-            <div className="space-y-6">
+          {/* Performance */}
+          <section className="space-y-3">
+            <SectionHeading label="Performance" />
             <div className="grid grid-cols-2 gap-3">
               <AppTile
                 to="/setlists"
@@ -153,7 +130,7 @@ function AdminDashboard() {
               />
               <AppTile
                 to="/requests"
-                color="#14b8a6"
+                color="#f59e0b"
                 icon={<i className="fas fa-hand-point-up" />}
                 title="Song Requests"
                 subtitle="Live fan requests"
@@ -166,104 +143,70 @@ function AdminDashboard() {
                 subtitle={ablesetUrl}
               />
             </div>
+          </section>
+
+          {/* Booking */}
+          <section className="space-y-3">
+            <SectionHeading label="Booking" />
+            <div className="grid grid-cols-2 gap-3">
+              <AppTile
+                to="/clients"
+                color="#06b6d4"
+                icon={<i className="fas fa-address-book" />}
+                title="Client Manager"
+                subtitle={`${activeClientCount} active client${activeClientCount !== 1 ? 's' : ''}`}
+              />
+              <AppTile
+                to="/shows"
+                color="#a78bfa"
+                icon={<i className="fas fa-calendar-days" />}
+                title="Shows"
+                subtitle="Manage upcoming & past shows"
+              />
             </div>
-          )}
-
-          {/* ── Booking ───────────────────────────────────────────────────── */}
-          {activeTab === 'booking' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-3">
-                <AppTile
-                  to="/clients"
-                  color="#06b6d4"
-                  icon={<i className="fas fa-address-book" />}
-                  title="Client Manager"
-                  subtitle={`${activeClientCount} active client${activeClientCount !== 1 ? 's' : ''}`}
-                />
-                <AppTile
-                  to="/shows"
-                  color="#a78bfa"
-                  icon={<i className="fas fa-calendar-days" />}
-                  title="Shows"
-                  subtitle="Manage upcoming & past shows"
-                />
-              </div>
-
-              <div className="border-t border-[#2a2a2a] pt-4 space-y-0.5">
-                <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-2">Reference Materials</p>
-                <LinkRow href="https://docs.google.com/spreadsheets/d/1csJb56jnisEb_37pYMVTOY6kSt6J-HqN5X7IYYRgH20/edit?usp=sharing" icon="fas fa-table" label="Ultrasheet" />
-                <LinkRow href="https://drive.google.com/drive/u/0/folders/1OySLOkCsj3OjSc-RhlZmlAPYN9J-yInD" icon="fas fa-heart" label="Weddings Flyer" />
-                <LinkRow href="https://drive.google.com/drive/u/0/folders/1ZITYFWoKwoxLbY6j_ejq-Cgxg8unlMk4" icon="fas fa-dollar-sign" label="Event Pricing" />
-              </div>
+            <div className="border-t border-[#2a2a2a] pt-3 space-y-0.5">
+              <SectionHeading label="Reference Materials" />
+              <LinkRow href="https://docs.google.com/spreadsheets/d/1csJb56jnisEb_37pYMVTOY6kSt6J-HqN5X7IYYRgH20/edit?usp=sharing" icon="fas fa-table" label="Ultrasheet" />
+              <LinkRow href="https://drive.google.com/drive/u/0/folders/1OySLOkCsj3OjSc-RhlZmlAPYN9J-yInD" icon="fas fa-heart" label="Weddings Flyer" />
+              <LinkRow href="https://drive.google.com/drive/u/0/folders/1ZITYFWoKwoxLbY6j_ejq-Cgxg8unlMk4" icon="fas fa-dollar-sign" label="Event Pricing" />
             </div>
-          )}
+          </section>
 
-          {/* ── Tools ────────────────────────────────────────────────────── */}
-          {activeTab === 'tools' && (
-            <div className="space-y-6">
-              {/* App tiles */}
-              <div className="grid grid-cols-2 gap-3">
-                <AppTile
-                  href="https://github.com/tdhckmn/ultraphonics"
-                  color="#6b7280"
-                  icon={<i className="fab fa-github" />}
-                  title="GitHub"
-                  subtitle="Source & releases"
-                />
-                <AppTile
-                  href="https://console.firebase.google.com/project/ultraphonics-web/overview"
-                  color="#f59e0b"
-                  icon={<i className="fas fa-fire" />}
-                  title="Firebase"
-                  subtitle="Firestore & hosting"
-                />
-                <AppTile
-                  href="https://analytics.google.com/analytics/web/#/a359545509p494449748/reports/intelligenthome"
-                  color="#f97316"
-                  icon={<i className="fas fa-chart-line" />}
-                  title="Analytics"
-                  subtitle="Traffic & engagement"
-                />
-                <AppTile
-                  href="https://search.google.com/search-console"
-                  color="#3b82f6"
-                  icon={<i className="fab fa-google" />}
-                  title="Search Console"
-                  subtitle="SEO & indexing"
-                />
-              </div>
+          {/* Services */}
+          <section className="border-t border-[#2a2a2a] pt-6 space-y-0.5">
+            <SectionHeading label="Services" />
+            <LinkRow href="https://github.com/tdhckmn/ultraphonics" icon="fab fa-github" label="GitHub" />
+            <LinkRow href="https://console.firebase.google.com/project/ultraphonics-web/overview" icon="fas fa-fire" label="Firebase" />
+            <LinkRow href="https://analytics.google.com/analytics/web/#/a359545509p494449748/reports/intelligenthome" icon="fas fa-chart-line" label="Analytics" />
+            <LinkRow href="https://search.google.com/search-console" icon="fab fa-google" label="Search Console" />
+            <LinkRow href="https://dashboard.emailjs.com/admin" icon="fas fa-paper-plane" label="EmailJS" />
+            <LinkRow href="https://dashboard.mailerlite.com/" icon="fas fa-envelope" label="MailerLite" />
+            <LinkRow href="https://discord.com/channels/1450501228462215208" icon="fab fa-discord" label="Discord" />
+            <LinkRow href="https://tiny.cc" icon="fas fa-link" label="tiny.cc" />
+          </section>
 
-              {/* Link rows */}
-              <div className="border-t border-[#2a2a2a] pt-4 space-y-0.5">
-                <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-2">Services</p>
-                <LinkRow href="https://studio.firebase.google.com/project/ultraphonics-web" icon="fas fa-wand-magic-sparkles" label="Firebase Studio" />
-                <LinkRow href="https://dashboard.emailjs.com/admin" icon="fas fa-paper-plane" label="EmailJS" />
-                <LinkRow href="https://dashboard.mailerlite.com/" icon="fas fa-envelope" label="MailerLite" />
-                <LinkRow href="https://discord.com/channels/1450501228462215208" icon="fab fa-discord" label="Discord" />
-              </div>
+          {/* Branding */}
+          <section className="border-t border-[#2a2a2a] pt-6 space-y-0.5">
+            <SectionHeading label="Branding" />
+            <LinkRow to="/branding-guide" icon="fas fa-palette" label="Brand Guide" />
+            <LinkRow to="/branding-dev-reference" icon="fas fa-code" label="Developer Reference" />
+            <LinkRow to="/branding-ai-prompt" icon="fas fa-robot" label="AI Branding Prompt" />
+          </section>
 
-              <div className="border-t border-[#2a2a2a] pt-4 space-y-0.5">
-                <p className="text-xs text-[#555] uppercase tracking-wider font-semibold mb-2">Branding</p>
-                <LinkRow to="/branding-guide" icon="fas fa-palette" label="Brand Guide" />
-                <LinkRow to="/branding-dev-reference" icon="fas fa-code" label="Developer Reference" />
-                <LinkRow to="/branding-ai-prompt" icon="fas fa-robot" label="AI Branding Prompt" />
-              </div>
-
-              <div className="border-t border-[#2a2a2a] pt-4">
-                <button
-                  onClick={() => {
-                    if ('serviceWorker' in navigator) {
-                      navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
-                    }
-                    window.location.reload(true);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-[#888] hover:text-white hover:border-[#444] transition-all text-sm"
-                >
-                  <i className="fas fa-rotate" /> Force Refresh Site
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Utility */}
+          <section className="border-t border-[#2a2a2a] pt-6">
+            <button
+              onClick={() => {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+                }
+                window.location.reload(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-[#888] hover:text-white hover:border-[#444] transition-all text-sm"
+            >
+              <i className="fas fa-rotate" /> Force Refresh Site
+            </button>
+          </section>
 
         </div>
       </main>
