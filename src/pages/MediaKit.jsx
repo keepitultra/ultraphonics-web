@@ -18,12 +18,11 @@ const GENRE_COLORS = {
 };
 
 function isValidSong(s) {
-  if (s.active === false) return false;
+  if (!s.showOnWebsite) return false;
   const t = (s.title || s.name || '').trim();
   if (!t) return false;
   if (/^Set\s*\d/i.test(t)) return false;
   if (t.startsWith('-') || t.startsWith('_')) return false;
-  if (!(s.genre || '').trim()) return false;
   return true;
 }
 

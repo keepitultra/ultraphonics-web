@@ -1,6 +1,19 @@
-import { useState, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import SettingsModal from './SettingsModal.jsx';
+
+// Meta tags that drive link-unfurl previews; removed while admin pages are mounted.
+const PREVIEW_META = [
+  ['property', 'og:image'],
+  ['property', 'og:image:alt'],
+  ['property', 'og:title'],
+  ['property', 'og:description'],
+  ['property', 'og:url'],
+  ['name', 'twitter:card'],
+  ['name', 'twitter:image'],
+  ['name', 'twitter:title'],
+  ['name', 'twitter:description'],
+];
 
 const DEFAULT_ABLESET = 'http://192.168.69.138';
 function getAblesetUrl() {
@@ -22,10 +35,11 @@ export function AdminDrawerProvider({ children }) {
 }
 
 const APPS = [
-  { id: 'setlists', label: 'Setlists', path: '/setlists', icon: 'fa-list',   color: '#3b82f6' },
-  { id: 'songs',    label: 'Songs',    path: '/songs',    icon: 'fa-music',        color: '#22c55e' },
-  { id: 'clients',  label: 'Clients',  path: '/clients',  icon: 'fa-address-book', color: '#00ddde' },
-  { id: 'shows',    label: 'Shows',    path: '/shows',    icon: 'fa-calendar-days',color: '#a78bfa' },
+  { id: 'setlists',  label: 'Setlists',  path: '/setlists',  icon: 'fa-list',          color: '#3b82f6' },
+  { id: 'songs',     label: 'Songs',     path: '/songs',     icon: 'fa-music',          color: '#22c55e' },
+  { id: 'clients',   label: 'Clients',   path: '/clients',   icon: 'fa-address-book',   color: '#00ddde' },
+  { id: 'shows',     label: 'Shows',     path: '/shows',     icon: 'fa-calendar-days',  color: '#a78bfa' },
+  { id: 'requests',  label: 'Requests',  path: '/requests',  icon: 'fa-hand-point-up',  color: '#14b8a6' },
 ];
 
 /** @param {{ activeApp: string, children: import('react').ReactNode }} props */
@@ -34,6 +48,21 @@ export default function AdminShell({ activeApp, children }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [appSheetOpen, setAppSheetOpen] = useState(false);
   const navigate = useNavigate();
+
+  // Admin pages should produce no link-unfurl preview. Detach the share meta tags
+  // while any admin page is mounted, then re-attach them on unmount.
+  useEffect(() => {
+    const removed = [];
+    for (const [attr, key] of PREVIEW_META) {
+      const el = document.querySelector(`meta[${attr}="${key}"]`);
+      if (el) { removed.push([el, el.nextSibling, el.parentNode]); el.remove(); }
+    }
+    return () => {
+      for (const [el, before, parent] of removed) {
+        if (parent) parent.insertBefore(el, before);
+      }
+    };
+  }, []);
 
   const activeAppDef = APPS.find(a => a.id === activeApp);
 
@@ -62,55 +91,64 @@ export default function AdminShell({ activeApp, children }) {
 
           <div className="w-px h-4 bg-[#2a2a2a] shrink-0" />
 
-          {/* App switcher — desktop: all tabs; mobile: active tab + chevron */}
+          {/* App switcher — active app + chevron on all sizes, opens sheet (mobile) or grid (desktop) */}
           <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-
-            {/* Mobile: show only active app with dropdown chevron */}
             {activeAppDef && (
-              <button
-                onClick={() => setAppSheetOpen(true)}
-                className="md:hidden flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors"
-                style={{ color: activeAppDef.color, background: `${activeAppDef.color}18` }}
-              >
-                <i className={`fas ${activeAppDef.icon} text-xs`} />
-                {activeAppDef.label}
-                <i className="fas fa-chevron-down text-[10px] ml-0.5 opacity-60" />
-              </button>
-            )}
-
-            {/* Desktop: all tabs */}
-            {APPS.map(app => {
-              const active = activeApp === app.id;
-              return (
+              <div className="relative">
                 <button
-                  key={app.id}
-                  onClick={() => { close(); navigate(app.path); }}
-                  className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md whitespace-nowrap transition-colors"
-                  style={active
-                    ? { color: app.color, background: `${app.color}18` }
-                    : { color: '#888' }
-                  }
-                  onMouseEnter={e => { if (!active) { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; } }}
-                  onMouseLeave={e => { if (!active) { e.currentTarget.style.color = '#888'; e.currentTarget.style.background = 'transparent'; } }}
+                  onClick={() => setAppSheetOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors"
+                  style={{ color: activeAppDef.color, background: `${activeAppDef.color}18` }}
                 >
-                  <i className={`fas ${app.icon} text-xs`} />
-                  {app.label}
+                  <i className={`fas ${activeAppDef.icon} text-xs`} />
+                  {activeAppDef.label}
+                  <i className="fas fa-chevron-down text-[10px] ml-0.5 opacity-60" />
                 </button>
-              );
-            })}
-            {/* AbleSet — desktop only, styled like other tabs */}
-            <a
-              href={getAblesetUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md whitespace-nowrap transition-colors"
-              style={{ color: '#888' }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.background = 'transparent'; }}
-            >
-              <i className="fas fa-circle-play text-xs" />
-              AbleSet
-            </a>
+
+                {/* Desktop grid dropdown */}
+                {appSheetOpen && (
+                  <div
+                    className="hidden md:block absolute top-full left-0 mt-2 z-50 rounded-2xl overflow-hidden shadow-2xl"
+                    style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', minWidth: '264px' }}
+                  >
+                    <div className="p-3 grid grid-cols-3 gap-1.5">
+                      {APPS.map(app => {
+                        const active = activeApp === app.id;
+                        return (
+                          <button
+                            key={app.id}
+                            onClick={() => { setAppSheetOpen(false); close(); navigate(app.path); }}
+                            className="flex flex-col items-center gap-2 p-3 rounded-xl transition-colors"
+                            style={active
+                              ? { background: `${app.color}18`, border: `1px solid ${app.color}30` }
+                              : { background: 'transparent', border: '1px solid transparent' }
+                            }
+                            onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = '#2a2a2a'; } }}
+                            onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
+                          >
+                            <i className={`fas ${app.icon} text-base`} style={{ color: app.color }} />
+                            <span className="text-xs font-semibold text-white leading-tight">{app.label}</span>
+                          </button>
+                        );
+                      })}
+                      <a
+                        href={getAblesetUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setAppSheetOpen(false)}
+                        className="flex flex-col items-center gap-2 p-3 rounded-xl transition-colors"
+                        style={{ background: 'transparent', border: '1px solid transparent' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+                      >
+                        <i className="fas fa-circle-play text-base" style={{ color: '#f43f5e' }} />
+                        <span className="text-xs font-semibold text-[#ccc] leading-tight">AbleSet</span>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right actions */}
@@ -145,12 +183,17 @@ export default function AdminShell({ activeApp, children }) {
         {children}
       </div>
 
-      {/* Mobile app-switcher bottom sheet */}
+      {/* App switcher overlays */}
       {appSheetOpen && (
         <>
-          {/* Backdrop */}
+          {/* Desktop: transparent click-outside backdrop */}
           <div
-            className="fixed inset-0 bg-black/60 z-50 md:hidden"
+            className="hidden md:block fixed inset-0 z-40"
+            onClick={() => setAppSheetOpen(false)}
+          />
+          {/* Mobile: dark backdrop */}
+          <div
+            className="md:hidden fixed inset-0 bg-black/60 z-50"
             onClick={() => setAppSheetOpen(false)}
           />
           {/* Sheet */}

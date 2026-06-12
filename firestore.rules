@@ -47,5 +47,11 @@ service cloud.firestore {
     match /quotes/{quoteId} {
       allow read, write: if isAllowedUser();
     }
+
+    // Song requests: public create (anyone at a show can submit), admin read/update/delete
+    match /songRequests/{requestId} {
+      allow create: if true;
+      allow read, update, delete: if isAllowedUser();
+    }
   }
 }

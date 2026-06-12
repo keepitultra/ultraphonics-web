@@ -264,9 +264,6 @@ export default function Home() {
           <h2 className="tagline">High-Energy Live Band for Events, Weddings &amp; Bars</h2>
           <h3 className="genres">Rock • Pop • Country • Soul</h3>
           <div className="button-container">
-            <Link to="/quote" className="button" id="book-button">
-              Book Us
-            </Link>
             <button
               className="button"
               id="tip-button"
@@ -274,6 +271,14 @@ export default function Home() {
             >
               Tip the Band
             </button>
+            <Link
+              to="/request"
+              className="button"
+              id="request-button"
+              onClick={() => trackEvent('song_request_cta_click', { source: 'hero' })}
+            >
+              Request a Song
+            </Link>
           </div>
           <div className="social-icons">
             <a

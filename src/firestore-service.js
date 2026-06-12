@@ -25,7 +25,8 @@ const COLLECTIONS = {
   SONGS: 'songs',
   CLIENTS: 'clients',
   SETLISTS: 'setlists',
-  QUOTES: 'quotes'
+  QUOTES: 'quotes',
+  SONG_REQUESTS: 'songRequests'
 };
 
 // ============= SHOWS =============
@@ -478,6 +479,43 @@ export function subscribeToMembers(callback, onError) {
     },
     onError
   );
+}
+
+// ============= SONG REQUESTS =============
+
+export async function getWebsiteSongs() {
+  const q = query(
+    collection(db, COLLECTIONS.SONGS),
+    where('showOnWebsite', '==', true)
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function saveSongRequest(title) {
+  return await addDoc(collection(db, COLLECTIONS.SONG_REQUESTS), {
+    title,
+    submittedAt: new Date().toISOString(),
+    source: 'web',
+    dismissed: false
+  });
+}
+
+export function subscribeToSongRequests(callback) {
+  const q = query(
+    collection(db, COLLECTIONS.SONG_REQUESTS),
+    orderBy('submittedAt', 'desc')
+  );
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+}
+
+export async function dismissSongRequest(id) {
+  await updateDoc(doc(db, COLLECTIONS.SONG_REQUESTS, id), {
+    dismissed: true,
+    dismissedAt: new Date().toISOString()
+  });
 }
 
 export { db, COLLECTIONS };

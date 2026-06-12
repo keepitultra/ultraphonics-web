@@ -152,6 +152,13 @@ function AdminDashboard() {
                 subtitle={`${songs.filter(s => s.active !== false).length} songs in library`}
               />
               <AppTile
+                to="/requests"
+                color="#14b8a6"
+                icon={<i className="fas fa-hand-point-up" />}
+                title="Song Requests"
+                subtitle="Live fan requests"
+              />
+              <AppTile
                 href={ablesetUrl}
                 color="#f43f5e"
                 icon={<i className="fas fa-circle-play" />}
