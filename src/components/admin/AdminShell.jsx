@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import SettingsModal from './SettingsModal.jsx';
 
@@ -48,6 +48,20 @@ export default function AdminShell({ activeApp, children }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [appSheetOpen, setAppSheetOpen] = useState(false);
   const navigate = useNavigate();
+  const dropdownRef = useRef(/** @type {HTMLDivElement|null} */(null));
+
+  // Close dropdown when clicking outside — avoids z-index conflicts with a backdrop element
+  useEffect(() => {
+    if (!appSheetOpen) return;
+    /** @param {MouseEvent} e */
+    function handleOutsideClick(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(/** @type {Node} */(e.target))) {
+        setAppSheetOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [appSheetOpen]);
 
   // Admin pages should produce no link-unfurl preview. Detach the share meta tags
   // while any admin page is mounted, then re-attach them on unmount.
@@ -92,9 +106,9 @@ export default function AdminShell({ activeApp, children }) {
           <div className="w-px h-4 bg-[#2a2a2a] shrink-0" />
 
           {/* App switcher — active app + chevron on all sizes, opens sheet (mobile) or grid (desktop) */}
-          <div className="flex items-center gap-1 flex-1 overflow-x-auto">
+          <div className="flex items-center gap-1 flex-1">
             {activeAppDef && (
-              <div className="relative">
+              <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setAppSheetOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors"
@@ -186,11 +200,6 @@ export default function AdminShell({ activeApp, children }) {
       {/* App switcher overlays */}
       {appSheetOpen && (
         <>
-          {/* Desktop: transparent click-outside backdrop */}
-          <div
-            className="hidden md:block fixed inset-0 z-40"
-            onClick={() => setAppSheetOpen(false)}
-          />
           {/* Mobile: dark backdrop */}
           <div
             className="md:hidden fixed inset-0 bg-black/60 z-50"

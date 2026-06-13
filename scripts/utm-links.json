@@ -88,6 +88,14 @@
       "medium": "offline",
       "destination": "https://ultraphonicsmusic.com/quote?utm_source=qr_code&utm_medium=offline&utm_campaign=weddings_flyer",
       "status": "ok"
+    },
+    {
+      "name": "Table Card",
+      "url": "https://tiny.cc/qc05101",
+      "campaign": "table_card",
+      "medium": "offline",
+      "destination": "https://ultraphonicsmusic.com/request?utm_source=qr_code&utm_medium=offline&utm_campaign=table_card",
+      "status": "ok"
     }
   ]
 }
