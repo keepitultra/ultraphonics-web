@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
@@ -87,6 +87,72 @@ function uuid() {
   });
 }
 
+// ── PDF helpers ───────────────────────────────────────────────────────────
+function safeHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function downloadSongPdf(song, opts) {
+  const { html, footnotes } = parseSongData(song.lyrics || '', false, 0);
+  const isDark = opts.background === 'dark';
+  const bg = isDark ? '#1a1a1a' : '#ffffff';
+  const fg = isDark ? '#e0e0e0' : '#111111';
+  const muted = isDark ? '#888888' : '#555555';
+  const chordColor = isDark ? '#22c55e' : '#16a34a';
+  const harmonyColor = isDark ? '#a78bfa' : '#7c3aed';
+  const sectionBg = isDark ? '#2a2a2a' : '#f0f0f0';
+  const fontSizeMap = { sm: '11px', md: '13px', lg: '16px', xl: '20px' };
+  const fontSize = fontSizeMap[opts.fontSize] || '13px';
+  const title = safeHtml(song.title || song.name || 'Song');
+  const artist = song.artist ? safeHtml(song.artist) : '';
+  const metaParts = [];
+  if (song.key) metaParts.push(`Key: ${safeHtml(song.key)}`);
+  if (song.capo > 0) metaParts.push(`Capo: ${song.capo}`);
+  if (song.eflat) metaParts.push('Eb Tuning');
+  if (song.dropD) metaParts.push('Drop D');
+
+  const doc = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+@page { size: ${opts.orientation}; margin: 0.75in; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { font-family: 'Courier New', monospace; font-size: ${fontSize}; background: ${bg}; color: ${fg}; line-height: 1.6; }
+.song-title { font-family: Arial, sans-serif; font-size: calc(${fontSize} * 1.7); font-weight: 700; margin-bottom: 4px; }
+.song-artist { font-family: Arial, sans-serif; font-size: calc(${fontSize} * 1.1); color: ${muted}; margin-bottom: 6px; }
+.song-meta { font-family: Arial, sans-serif; font-size: calc(${fontSize} * 0.85); color: ${muted}; margin-bottom: 20px; display: flex; gap: 14px; flex-wrap: wrap; }
+.lp-line { margin-bottom: 2px; }
+.lp-section { font-family: Arial, sans-serif; font-size: calc(${fontSize} * 0.8); font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: ${muted}; margin-top: 20px; margin-bottom: 6px; display: inline-block; padding: 2px 6px; background: ${sectionBg}; border-radius: 3px; }
+.lp-cw { display: inline-flex; flex-direction: column; vertical-align: top; margin-right: 1px; }
+.lp-chord { color: ${chordColor}; font-weight: 700; font-size: calc(${fontSize} * 0.85); line-height: 1.2; }
+.lp-harmony { color: ${harmonyColor}; font-style: italic; }
+.lp-footnote { color: ${chordColor}; font-size: 0.7em; vertical-align: super; }
+.lp-empty { color: ${muted}; font-style: italic; }
+.footnotes { margin-top: 28px; padding-top: 12px; border-top: 1px solid ${muted}44; }
+.footnotes-title { font-family: Arial, sans-serif; font-size: calc(${fontSize} * 0.8); text-transform: uppercase; letter-spacing: 0.1em; color: ${muted}; font-weight: 700; margin-bottom: 8px; }
+.footnotes ol { padding-left: 20px; }
+.footnotes li { color: ${muted}; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="song-title">${title}</div>
+${artist ? `<div class="song-artist">${artist}</div>` : ''}
+${metaParts.length ? `<div class="song-meta">${metaParts.join('<span style="margin: 0 4px; opacity: 0.4">·</span>')}</div>` : ''}
+${html}
+${footnotes.length ? `<div class="footnotes"><div class="footnotes-title">Performance Notes</div><ol>${footnotes.map(n => `<li>${safeHtml(n)}</li>`).join('')}</ol></div>` : ''}
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) { alert('Please allow popups to download the PDF.'); return; }
+  win.document.write(doc);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 400);
+}
+
 // ── Shared input styles ───────────────────────────────────────────────────
 const INPUT = 'w-full px-3 py-2.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#22c55e]';
 
@@ -153,8 +219,20 @@ export default function SongManager() {
   const [syncing, setSyncing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showImportTrigger, setShowImportTrigger] = useState(false);
+  const [pdfPanelOpen, setPdfPanelOpen] = useState(false);
+  const [pdfOpts, setPdfOpts] = useState({ background: 'light', fontSize: 'md', orientation: 'portrait' });
   const dragCounterRef = useRef(0);
   const fileInputRef = useRef(null);
+  const pdfPanelRef = useRef(null);
+
+  useEffect(() => {
+    if (!pdfPanelOpen) return;
+    function handleOutside(e) {
+      if (pdfPanelRef.current && !pdfPanelRef.current.contains(e.target)) setPdfPanelOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [pdfPanelOpen]);
 
   const selected = songs.find(s => s.id === selectedId) || null;
 
@@ -468,7 +546,7 @@ export default function SongManager() {
       {/* View mode */}
       {selectedId && selected && mode === 'view' && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Header */}
+          {/* Header – title/artist only */}
           <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-start gap-3">
             {backUrl && (
               <button
@@ -483,29 +561,84 @@ export default function SongManager() {
               <h2 className="text-lg font-bold text-white truncate">{selected.title || selected.name}</h2>
               {selected.artist && <p className="text-sm text-[#888]">{selected.artist}</p>}
             </div>
-            <div className="shrink-0 flex items-center gap-1.5">
-              {selected.chartUrl && (
-                <a
-                  href={selected.chartUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
-                  title="View Chart PDF"
-                >
-                  <i className="fas fa-file-pdf text-sm" />
-                </a>
-              )}
-              {user && (
-                <>
-                  <button onClick={enterEdit} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors" title="Edit">
-                    <i className="fas fa-pen text-sm" />
+          </div>
+
+          {/* Action bar */}
+          <div className="shrink-0 px-4 py-1.5 border-b border-[#2a2a2a] flex items-center gap-1.5">
+            {/* PDF download */}
+            <div className="relative" ref={pdfPanelRef}>
+              <button
+                onClick={() => setPdfPanelOpen(v => !v)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold border rounded-lg transition-colors ${
+                  pdfPanelOpen
+                    ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]'
+                    : 'text-[#888] hover:text-white border-[#2a2a2a] hover:border-[#555]'
+                }`}
+              >
+                <i className="fas fa-file-pdf" />
+                PDF
+                <i className={`fas fa-chevron-down text-[9px] transition-transform duration-150 ${pdfPanelOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {pdfPanelOpen && (
+                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl p-4 w-60">
+                  <PdfOptionGroup label="Background">
+                    <PdfOptionBtn active={pdfOpts.background === 'light'} onClick={() => setPdfOpts(o => ({ ...o, background: 'light' }))}>Light</PdfOptionBtn>
+                    <PdfOptionBtn active={pdfOpts.background === 'dark'} onClick={() => setPdfOpts(o => ({ ...o, background: 'dark' }))}>Dark</PdfOptionBtn>
+                  </PdfOptionGroup>
+                  <PdfOptionGroup label="Text Size">
+                    <PdfOptionBtn active={pdfOpts.fontSize === 'sm'} onClick={() => setPdfOpts(o => ({ ...o, fontSize: 'sm' }))}>Small</PdfOptionBtn>
+                    <PdfOptionBtn active={pdfOpts.fontSize === 'md'} onClick={() => setPdfOpts(o => ({ ...o, fontSize: 'md' }))}>Med</PdfOptionBtn>
+                    <PdfOptionBtn active={pdfOpts.fontSize === 'lg'} onClick={() => setPdfOpts(o => ({ ...o, fontSize: 'lg' }))}>Large</PdfOptionBtn>
+                    <PdfOptionBtn active={pdfOpts.fontSize === 'xl'} onClick={() => setPdfOpts(o => ({ ...o, fontSize: 'xl' }))}>XL</PdfOptionBtn>
+                  </PdfOptionGroup>
+                  <PdfOptionGroup label="Orientation">
+                    <PdfOptionBtn active={pdfOpts.orientation === 'portrait'} onClick={() => setPdfOpts(o => ({ ...o, orientation: 'portrait' }))}>Portrait</PdfOptionBtn>
+                    <PdfOptionBtn active={pdfOpts.orientation === 'landscape'} onClick={() => setPdfOpts(o => ({ ...o, orientation: 'landscape' }))}>Landscape</PdfOptionBtn>
+                  </PdfOptionGroup>
+                  <button
+                    onClick={() => { downloadSongPdf(selected, pdfOpts); setPdfPanelOpen(false); }}
+                    className="w-full mt-2 px-4 py-2 bg-[#16a34a] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <i className="fas fa-download" /> Download
                   </button>
-                  <button onClick={handleDelete} className="p-2 text-red-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors" title="Delete">
-                    <i className="fas fa-trash text-sm" />
-                  </button>
-                </>
+                </div>
               )}
             </div>
+
+            {/* Chart link */}
+            {selected.chartUrl && (
+              <a
+                href={selected.chartUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-[#888] hover:text-white border border-[#2a2a2a] hover:border-[#555] rounded-lg transition-colors"
+                title="View Chart"
+              >
+                <i className="fas fa-external-link-alt" /> Chart
+              </a>
+            )}
+
+            <div className="flex-1" />
+
+            {/* Edit / Delete */}
+            {user && (
+              <>
+                <button
+                  onClick={enterEdit}
+                  className="p-1.5 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+                  title="Edit"
+                >
+                  <i className="fas fa-pen text-sm" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="p-1.5 text-red-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
+                  title="Delete"
+                >
+                  <i className="fas fa-trash text-sm" />
+                </button>
+              </>
+            )}
           </div>
 
           {/* Metadata strip */}
@@ -772,6 +905,30 @@ function CheckField({ label, checked, onChange }) {
       />
       <span className="text-sm text-[#ccc]">{label}</span>
     </label>
+  );
+}
+
+function PdfOptionGroup({ label, children }) {
+  return (
+    <div className="mb-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[#555] mb-1.5">{label}</p>
+      <div className="flex gap-1.5 flex-wrap">{children}</div>
+    </div>
+  );
+}
+
+function PdfOptionBtn({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-1 text-xs rounded-lg border transition-colors font-semibold ${
+        active
+          ? 'bg-[#22c55e]/15 border-[#22c55e]/50 text-[#22c55e]'
+          : 'border-[#2a2a2a] text-[#888] hover:text-white hover:border-[#555]'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

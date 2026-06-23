@@ -334,6 +334,7 @@ function ClientProfile({ client }) {
         <InfoRow label="Contact" value={client.contactName} />
         <InfoRow label="Type" value={client.type} />
         {client.preferredContact && <InfoRow label="Preferred" value={client.preferredContact} />}
+        {client.nextContactDate && <InfoRow label="Next Contact" value={formatDate(client.nextContactDate)} accent />}
         {client.email && <InfoRow label="Email"><a href={`mailto:${client.email}`} className="text-[#00ddde] hover:underline">{client.email}</a></InfoRow>}
         {client.phone && <InfoRow label="Phone"><a href={`tel:${client.phone}`} className="text-[#00ddde] hover:underline">{client.phone}</a></InfoRow>}
         {client.website && <InfoRow label="Website"><a href={client.website} target="_blank" rel="noopener noreferrer" className="text-[#00ddde] hover:underline truncate">{client.website}</a></InfoRow>}
@@ -542,7 +543,7 @@ function ClientFormModal({ client, onClose, onSaved }) {
     name: '', type: 'Venue', status: 'Lead', contactName: '', preferredContact: '', email: '', phone: '',
     website: '', address: '', rate: '', paymentTerms: '', venueDetails: '',
     defaultStartTime: '', defaultEndTime: '', defaultItinerary: '', defaultNotes: '',
-    tags: '',
+    tags: '', nextContactDate: '',
   });
   const [saving, setSaving] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
@@ -593,6 +594,9 @@ function ClientFormModal({ client, onClose, onSaved }) {
             <select value={form.preferredContact || ''} onChange={e => setField('preferredContact', e.target.value)} className={SELECT}>
               {['','None','Phone','Email','Facebook','Website Form','In Person'].map(o => <option key={o} value={o}>{o || '— Select —'}</option>)}
             </select>
+          </FormField>
+          <FormField label="Next Contact Date">
+            <input type="date" value={form.nextContactDate || ''} onChange={e => setField('nextContactDate', e.target.value)} className={INPUT} />
           </FormField>
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Email">

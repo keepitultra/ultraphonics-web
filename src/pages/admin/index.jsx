@@ -3,8 +3,9 @@ import { version } from '../../../package.json';
 import { Link } from 'react-router-dom';
 import AuthGuard from '../../components/AuthGuard.jsx';
 import SettingsModal from '../../components/admin/SettingsModal.jsx';
+import HeadsUpSection from '../../components/admin/HeadsUpSection.jsx';
 import { useAuth } from '../../firebase/AuthContext.jsx';
-import { useSetlists, useSongs, useClients } from '../../firebase/useFirestore.js';
+import { useSetlists, useSongs, useClients, useShows } from '../../firebase/useFirestore.js';
 
 // ── App tile (large, colored accent) ────────────────────────────────────────
 function AppTile({ to, href, color, icon, title, subtitle }) {
@@ -45,6 +46,7 @@ function SectionHeading({ label }) {
 // ── Dashboard ────────────────────────────────────────────────────────────────
 function AdminDashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [ablesetUrl, setAblesetUrl] = useState(
     localStorage.getItem('ableset_url') || 'http://192.168.69.138'
   );
@@ -53,6 +55,7 @@ function AdminDashboard() {
   const { data: setlists = [] } = useSetlists();
   const { data: songs    = [] } = useSongs();
   const { data: clients  = [] } = useClients();
+  const { data: shows    = [] } = useShows();
 
   const firstName         = user?.displayName?.split(' ')[0] || null;
   const activeClientCount = clients.filter(c => c.status === 'Active').length;
@@ -72,9 +75,17 @@ function AdminDashboard() {
       </div>
 
       {/* Navbar */}
-      <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a] px-4">
-        <div className="flex items-center justify-between h-14 max-w-5xl mx-auto">
+      <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a] px-4 z-40">
+        <div className="flex items-center justify-between h-12">
           <div className="flex items-center gap-3">
+            {/* Mobile: toggle Heads Up drawer */}
+            <button
+              onClick={() => setDrawerOpen(v => !v)}
+              className="md:hidden p-2 -ml-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+              title="Heads Up"
+            >
+              <i className="fas fa-bell text-sm" />
+            </button>
             <img src="/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-8 w-8" />
             <span className="font-bold text-lg text-white">
               {firstName ? `Hey, ${firstName}!` : 'Admin'}
@@ -106,118 +117,138 @@ function AdminDashboard() {
         </div>
       </nav>
 
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-xl mx-auto px-4 pt-6 pb-8 space-y-8">
+      {/* Body */}
+      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+        {/* Mobile backdrop */}
+        {drawerOpen && (
+          <div
+            className="fixed inset-0 bg-black/60 z-30 md:hidden"
+            onClick={() => setDrawerOpen(false)}
+          />
+        )}
 
-          {/* Performance */}
-          <section className="space-y-3">
-            <SectionHeading label="Performance" />
-            <div className="grid grid-cols-2 gap-3">
-              <AppTile
-                to="/setlists"
-                color="#3b82f6"
-                icon={<i className="fas fa-list" />}
-                title="Setlists"
-                subtitle={`${setlists.length} saved setlist${setlists.length !== 1 ? 's' : ''}`}
-              />
-              <AppTile
-                to="/songs"
-                color="#22c55e"
-                icon={<i className="fas fa-music" />}
-                title="Songs"
-                subtitle={`${songs.filter(s => s.active !== false).length} songs in library`}
-              />
-              <AppTile
-                to="/requests"
-                color="#f59e0b"
-                icon={<i className="fas fa-hand-point-up" />}
-                title="Song Requests"
-                subtitle="Live fan requests"
-              />
-              <AppTile
-                href={ablesetUrl}
-                color="#f43f5e"
-                icon={<i className="fas fa-circle-play" />}
-                title="AbleSet"
-                subtitle={ablesetUrl}
-              />
+        {/* Heads Up sidebar */}
+        <aside
+          className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}
+        >
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-6">
+            <HeadsUpSection shows={shows} clients={clients} />
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 min-w-0 overflow-y-auto">
+          <div className="max-w-xl mx-auto px-4 pt-6 pb-8 space-y-8">
+
+            {/* Performance */}
+            <section className="space-y-3">
+              <SectionHeading label="Performance" />
+              <div className="grid grid-cols-2 gap-3">
+                <AppTile
+                  to="/setlists"
+                  color="#3b82f6"
+                  icon={<i className="fas fa-list" />}
+                  title="Setlists"
+                  subtitle={`${setlists.length} saved setlist${setlists.length !== 1 ? 's' : ''}`}
+                />
+                <AppTile
+                  to="/songs"
+                  color="#22c55e"
+                  icon={<i className="fas fa-music" />}
+                  title="Songs"
+                  subtitle={`${songs.filter(s => s.active !== false).length} songs in library`}
+                />
+                <AppTile
+                  to="/requests"
+                  color="#f59e0b"
+                  icon={<i className="fas fa-hand-point-up" />}
+                  title="Song Requests"
+                  subtitle="Live fan requests"
+                />
+                <AppTile
+                  href={ablesetUrl}
+                  color="#f43f5e"
+                  icon={<i className="fas fa-circle-play" />}
+                  title="AbleSet"
+                  subtitle={ablesetUrl}
+                />
+              </div>
+            </section>
+
+            {/* Booking */}
+            <section className="space-y-3">
+              <SectionHeading label="Booking" />
+              <div className="grid grid-cols-2 gap-3">
+                <AppTile
+                  to="/clients"
+                  color="#06b6d4"
+                  icon={<i className="fas fa-address-book" />}
+                  title="Client Manager"
+                  subtitle={`${activeClientCount} active client${activeClientCount !== 1 ? 's' : ''}`}
+                />
+                <AppTile
+                  to="/shows"
+                  color="#a78bfa"
+                  icon={<i className="fas fa-calendar-days" />}
+                  title="Shows"
+                  subtitle="Manage upcoming & past shows"
+                />
+              </div>
+              <div className="border-t border-[#2a2a2a] pt-3 space-y-0.5">
+                <SectionHeading label="Reference Materials" />
+                <LinkRow href="https://docs.google.com/spreadsheets/d/1csJb56jnisEb_37pYMVTOY6kSt6J-HqN5X7IYYRgH20/edit?usp=sharing" icon="fas fa-table" label="Ultrasheet" />
+                <LinkRow href="https://drive.google.com/drive/u/0/folders/1OySLOkCsj3OjSc-RhlZmlAPYN9J-yInD" icon="fas fa-heart" label="Weddings Flyer" />
+                <LinkRow href="https://drive.google.com/drive/u/0/folders/1ZITYFWoKwoxLbY6j_ejq-Cgxg8unlMk4" icon="fas fa-dollar-sign" label="Event Pricing" />
+              </div>
+            </section>
+
+            {/* Services */}
+            <section className="border-t border-[#2a2a2a] pt-6 space-y-0.5">
+              <SectionHeading label="Services" />
+              <LinkRow href="https://github.com/tdhckmn/ultraphonics" icon="fab fa-github" label="GitHub" />
+              <LinkRow href="https://console.firebase.google.com/project/ultraphonics-web/overview" icon="fas fa-fire" label="Firebase" />
+              <LinkRow href="https://analytics.google.com/analytics/web/#/a359545509p494449748/reports/intelligenthome" icon="fas fa-chart-line" label="Analytics" />
+              <LinkRow href="https://search.google.com/search-console" icon="fab fa-google" label="Search Console" />
+              <LinkRow href="https://dashboard.emailjs.com/admin" icon="fas fa-paper-plane" label="EmailJS" />
+              <LinkRow href="https://dashboard.mailerlite.com/" icon="fas fa-envelope" label="MailerLite" />
+              <LinkRow href="https://discord.com/channels/1450501228462215208" icon="fab fa-discord" label="Discord" />
+              <LinkRow href="https://tiny.cc" icon="fas fa-link" label="tiny.cc" />
+            </section>
+
+            {/* Branding */}
+            <section className="border-t border-[#2a2a2a] pt-6 space-y-0.5">
+              <SectionHeading label="Branding" />
+              <LinkRow to="/branding-guide" icon="fas fa-palette" label="Brand Guide" />
+              <LinkRow to="/branding-dev-reference" icon="fas fa-code" label="Developer Reference" />
+              <LinkRow to="/branding-ai-prompt" icon="fas fa-robot" label="AI Branding Prompt" />
+            </section>
+
+            {/* Utility */}
+            <section className="border-t border-[#2a2a2a] pt-6">
+              <button
+                onClick={() => {
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+                  }
+                  window.location.reload(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-[#888] hover:text-white hover:border-[#444] transition-all text-sm"
+              >
+                <i className="fas fa-rotate" /> Force Refresh Site
+              </button>
+            </section>
+
+          </div>
+
+          {/* Footer */}
+          <footer className="h-9 flex items-center border-t border-[#2a2a2a] bg-[#121212]/60 px-4">
+            <div className="max-w-xl w-full mx-auto flex justify-between items-center">
+              <p className="text-[#444] text-xs">Ultraphonics Admin Portal</p>
+              <p className="text-[#333] text-xs">v{version}</p>
             </div>
-          </section>
-
-          {/* Booking */}
-          <section className="space-y-3">
-            <SectionHeading label="Booking" />
-            <div className="grid grid-cols-2 gap-3">
-              <AppTile
-                to="/clients"
-                color="#06b6d4"
-                icon={<i className="fas fa-address-book" />}
-                title="Client Manager"
-                subtitle={`${activeClientCount} active client${activeClientCount !== 1 ? 's' : ''}`}
-              />
-              <AppTile
-                to="/shows"
-                color="#a78bfa"
-                icon={<i className="fas fa-calendar-days" />}
-                title="Shows"
-                subtitle="Manage upcoming & past shows"
-              />
-            </div>
-            <div className="border-t border-[#2a2a2a] pt-3 space-y-0.5">
-              <SectionHeading label="Reference Materials" />
-              <LinkRow href="https://docs.google.com/spreadsheets/d/1csJb56jnisEb_37pYMVTOY6kSt6J-HqN5X7IYYRgH20/edit?usp=sharing" icon="fas fa-table" label="Ultrasheet" />
-              <LinkRow href="https://drive.google.com/drive/u/0/folders/1OySLOkCsj3OjSc-RhlZmlAPYN9J-yInD" icon="fas fa-heart" label="Weddings Flyer" />
-              <LinkRow href="https://drive.google.com/drive/u/0/folders/1ZITYFWoKwoxLbY6j_ejq-Cgxg8unlMk4" icon="fas fa-dollar-sign" label="Event Pricing" />
-            </div>
-          </section>
-
-          {/* Services */}
-          <section className="border-t border-[#2a2a2a] pt-6 space-y-0.5">
-            <SectionHeading label="Services" />
-            <LinkRow href="https://github.com/tdhckmn/ultraphonics" icon="fab fa-github" label="GitHub" />
-            <LinkRow href="https://console.firebase.google.com/project/ultraphonics-web/overview" icon="fas fa-fire" label="Firebase" />
-            <LinkRow href="https://analytics.google.com/analytics/web/#/a359545509p494449748/reports/intelligenthome" icon="fas fa-chart-line" label="Analytics" />
-            <LinkRow href="https://search.google.com/search-console" icon="fab fa-google" label="Search Console" />
-            <LinkRow href="https://dashboard.emailjs.com/admin" icon="fas fa-paper-plane" label="EmailJS" />
-            <LinkRow href="https://dashboard.mailerlite.com/" icon="fas fa-envelope" label="MailerLite" />
-            <LinkRow href="https://discord.com/channels/1450501228462215208" icon="fab fa-discord" label="Discord" />
-            <LinkRow href="https://tiny.cc" icon="fas fa-link" label="tiny.cc" />
-          </section>
-
-          {/* Branding */}
-          <section className="border-t border-[#2a2a2a] pt-6 space-y-0.5">
-            <SectionHeading label="Branding" />
-            <LinkRow to="/branding-guide" icon="fas fa-palette" label="Brand Guide" />
-            <LinkRow to="/branding-dev-reference" icon="fas fa-code" label="Developer Reference" />
-            <LinkRow to="/branding-ai-prompt" icon="fas fa-robot" label="AI Branding Prompt" />
-          </section>
-
-          {/* Utility */}
-          <section className="border-t border-[#2a2a2a] pt-6">
-            <button
-              onClick={() => {
-                if ('serviceWorker' in navigator) {
-                  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
-                }
-                window.location.reload(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-[#888] hover:text-white hover:border-[#444] transition-all text-sm"
-            >
-              <i className="fas fa-rotate" /> Force Refresh Site
-            </button>
-          </section>
-
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="shrink-0 h-9 flex items-center border-t border-[#2a2a2a] bg-[#121212]/60">
-        <div className="max-w-xl w-full mx-auto px-4 flex justify-between items-center">
-          <p className="text-[#444] text-xs">Ultraphonics Admin Portal</p>
-          <p className="text-[#333] text-xs">v{version}</p>
-        </div>
-      </footer>
+          </footer>
+        </main>
+      </div>
 
       {settingsOpen && <SettingsModal onClose={handleSettingsClose} />}
     </div>
