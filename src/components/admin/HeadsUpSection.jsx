@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import MemberAvatar from '../MemberAvatar.jsx';
 
 const PERSONNEL_COLORS = {
   Anthony: '#f59e0b', Tom: '#22c55e', Lester: '#a78bfa',
@@ -33,14 +34,14 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function HeadsUpSection({ shows, clients }) {
+export default function HeadsUpSection({ shows, clients, memberProfiles = {}, onTotalCount }) {
   const [lookaheadWeeks, setLookaheadWeeks] = useState(() => {
-    const v = parseInt(localStorage.getItem('hu_lookahead_weeks') || '3');
-    return isNaN(v) ? 3 : v;
+    const v = parseInt(localStorage.getItem('hu_lookahead_weeks') || '4');
+    return isNaN(v) ? 4 : v;
   });
   const [overdueMonths, setOverdueMonths] = useState(() => {
-    const v = parseInt(localStorage.getItem('hu_overdue_months') || '2');
-    return isNaN(v) ? 2 : v;
+    const v = parseInt(localStorage.getItem('hu_overdue_months') || '1');
+    return isNaN(v) ? 1 : v;
   });
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -58,10 +59,14 @@ export default function HeadsUpSection({ shows, clients }) {
 
     // Last past-show date per client (normalized to YYYY-MM-DD for safe comparison)
     const lastShowByClient = {};
+    const futureShowClientIds = new Set();
     for (const show of shows) {
       if (show.clientId && show.date) {
         const d = normalizeDateStr(show.date);
-        if (d && d < todayStr) {
+        if (!d) continue;
+        if (d >= todayStr) {
+          futureShowClientIds.add(show.clientId);
+        } else {
           if (!lastShowByClient[show.clientId] || d > lastShowByClient[show.clientId]) {
             lastShowByClient[show.clientId] = d;
           }
@@ -86,6 +91,7 @@ export default function HeadsUpSection({ shows, clients }) {
       .filter(c => {
         if (c.status !== 'Active') return false;
         if (scheduledContactIds.has(c.id)) return false;
+        if (futureShowClientIds.has(c.id)) return false;
         const lastSignal = [
           c.lastInteraction ? c.lastInteraction.slice(0, 10) : null,
           lastShowByClient[c.id] || null,
@@ -107,6 +113,8 @@ export default function HeadsUpSection({ shows, clients }) {
   }, [shows, clients, lookaheadWeeks, overdueMonths]);
 
   const totalCount = upcomingShows.length + scheduledContacts.length + overdueClients.length;
+
+  useEffect(() => { onTotalCount?.(totalCount); }, [totalCount, onTotalCount]);
 
   return (
     <div className="space-y-3">
@@ -188,19 +196,23 @@ export default function HeadsUpSection({ shows, clients }) {
                 </div>
                 {show.personnel?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {show.personnel.map(name => (
-                      <span
-                        key={name}
-                        className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                        style={{
-                          background: `${PERSONNEL_COLORS[name] || '#888'}15`,
-                          color: PERSONNEL_COLORS[name] || '#888',
-                          border: `1px solid ${PERSONNEL_COLORS[name] || '#888'}30`,
-                        }}
-                      >
-                        {name}
-                      </span>
-                    ))}
+                    {show.personnel.map(name => {
+                      const color = PERSONNEL_COLORS[name] || '#888';
+                      return (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 text-[10px] pl-0.5 pr-2 py-0.5 rounded-full font-semibold"
+                          style={{
+                            background: `${color}15`,
+                            color,
+                            border: `1px solid ${color}30`,
+                          }}
+                        >
+                          <MemberAvatar name={name} profiles={memberProfiles} size={14} color={color} />
+                          {name}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
