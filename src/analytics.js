@@ -3,11 +3,34 @@
  * Handles Google Analytics injection and event tracking.
  */
 
+const CONSENT_KEY = 'up_cookie_consent';
+
 /**
  * Check if QA mode is enabled
  */
 function isQAMode() {
     return localStorage.getItem('up_qa_mode') === 'true';
+}
+
+/**
+ * Returns the stored cookie consent choice: 'granted', 'denied', or null if undecided.
+ */
+export function getConsent() {
+    return localStorage.getItem(CONSENT_KEY);
+}
+
+export function setConsent(value) {
+    localStorage.setItem(CONSENT_KEY, value);
+}
+
+/**
+ * Initializes analytics only if the visitor has already granted consent.
+ * Safe to call unconditionally on app boot.
+ */
+export function initAnalyticsIfConsented(config) {
+    if (getConsent() === 'granted') {
+        initAnalytics(config);
+    }
 }
 
 /**

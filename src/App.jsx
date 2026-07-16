@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Navigation from './components/Navigation.jsx';
 import Footer from './components/Footer.jsx';
 import ScrollToTop from './components/ScrollToTop.jsx';
+import CookieConsentBanner from './components/CookieConsentBanner.jsx';
 import { AdminDrawerProvider } from './components/admin/AdminShell.jsx';
 
 // Public pages
@@ -14,6 +15,7 @@ import MediaKit from './pages/MediaKit.jsx';
 import LiveViewer from './pages/LiveViewer.jsx';
 import EventPage from './pages/EventPage.jsx';
 import SongRequest from './pages/SongRequest.jsx';
+import Privacy from './pages/Privacy.jsx';
 
 // Admin
 import AdminRouter from './pages/admin/index.jsx';
@@ -55,6 +57,7 @@ function PublicLayout() {
         <Route path="/live" element={<LiveViewer />} />
         <Route path="/events/:id" element={<EventPage />} />
         <Route path="/request" element={<SongRequest />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="/admin/*" element={<AdminRouter />} />
         <Route path="/setlists" element={<AdminDrawerProvider><SetlistManager /></AdminDrawerProvider>} />
         <Route path="/songs" element={<AdminDrawerProvider><SongManager /></AdminDrawerProvider>} />
@@ -63,6 +66,7 @@ function PublicLayout() {
         <Route path="/requests" element={<AdminDrawerProvider><SongRequestsManager /></AdminDrawerProvider>} />
       </Routes>
       {!hideChrome && <Footer />}
+      {!isAdmin && <CookieConsentBanner />}
     </>
   );
 }

@@ -627,6 +627,73 @@ a.venue-link:hover {
   filter: brightness(0) invert(1);
 }
 
+.privacy-content {
+  width: 100%;
+  max-width: 700px;
+  padding: 0 var(--spacing-lg) var(--spacing-xxl);
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.privacy-content h2 {
+  text-align: left;
+  color: var(--color-accent);
+  margin-top: var(--spacing-lg);
+}
+
+.privacy-content p {
+  text-align: left;
+  color: var(--color-text-secondary);
+}
+
+.privacy-content a {
+  color: var(--color-accent);
+}
+
+.cookie-banner {
+  position: fixed;
+  left: var(--spacing-md);
+  right: var(--spacing-md);
+  bottom: var(--spacing-md);
+  z-index: 9998;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--color-background);
+  border: 1px solid var(--color-accent);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+}
+
+.cookie-banner-text {
+  margin: 0;
+  flex: 1 1 320px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.cookie-banner-text a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.cookie-banner-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.cookie-banner-actions .button,
+.cookie-banner-actions .button-outline {
+  padding: 8px 16px;
+  font-size: var(--font-size-sm);
+}
+
 /* --- Services Page Styles --- */
 .services-container {
     max-width: 1100px;
