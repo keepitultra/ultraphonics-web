@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
 import { useSongs } from '../firebase/useFirestore.js';
 import { getSongs, saveSong, deleteSong, syncSongsBatch } from '../firestore-service.js';
 import { parseSongData } from '../utils/lyricParser.ts';
+import { LEAD_VOCALISTS } from '../constants/band.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const GENRE_ORDER = ['Pop', 'Soul', 'Rock', 'Country', 'Other'];
@@ -78,6 +80,107 @@ function buildSongDocument(imported) {
 
 function genreFor(song) {
   return GENRE_MAP[(song.genre || '').toLowerCase().trim()] || 'Other';
+}
+
+// ── Vocalist capability import ──────────────────────────────────────────────
+const DEFAULT_VOCAL_TABLE = `Song Name\tTom\tShelley\tKelsey\tDavid\tPreferred
+24K Magic\tFALSE\tTRUE\tTRUE\tTRUE\tDavid
+Aeroplane\tTRUE\tFALSE\tFALSE\tTRUE\tTom
+Ain't It Fun\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+All the small things\tTRUE\tFALSE\tFALSE\tFALSE\tDavid
+Any Man Of Mine\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+Attention\tFALSE\tTRUE\tFALSE\tTRUE\tDavid
+Before He Cheats\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+Beer Never Broke My Heart\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+Brown Eyed Lover\tTRUE\tFALSE\tFALSE\tFALSE\tDavid
+Country Girl\tFALSE\tFALSE\tFALSE\tTRUE\tDavid
+Dancing in the moonlight\tTRUE\tTRUE\tFALSE\tFALSE\tTom
+December 1963\tFALSE\tFALSE\tTRUE\tTRUE\tDavid
+Don't Start Now\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Don't Stop Believing\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Drive\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+Espresso\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Flowers\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Higher\tTRUE\tFALSE\tTRUE\tTRUE\tDavid
+Hit Me With You Best Shot\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+I Had Some Help\tTRUE\tTRUE\tFALSE\tTRUE\tDavid
+I Want It That Way\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+I Wanna Dance With Somebody\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Interstate Love Song\tTRUE\tFALSE\tFALSE\tFALSE\tTom
+Isn't She Lovely\tFALSE\tFALSE\tTRUE\tTRUE\tDavid
+Juice\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+Lose Control\tFALSE\tFALSE\tTRUE\tTRUE\tDavid
+Lose Yourself\tFALSE\tFALSE\tFALSE\tTRUE\tDavid
+Man! I Feel Like A Woman\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Mary Jane's Last Dance\tTRUE\tFALSE\tFALSE\tFALSE\tTom
+Mash_About Damn Time/ Superstition\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+MmmBop\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+Mr. Brightside\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+My Own Worst Enemy\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+Need A Favor\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+Neon Moon\tTRUE\tTRUE\tTRUE\tTRUE\tDavid
+Pink Pony Club\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Pony\tFALSE\tFALSE\tFALSE\tTRUE\tDavid
+Redneck Woman\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Semi-Charmed Life\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+Sex On Fire\tFALSE\tFALSE\tTRUE\tTRUE\tDavid
+Shut Up And Dance With Me\tFALSE\tTRUE\tTRUE\tTRUE\tDavid
+Something To Talk About\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Sparks Fly\tTRUE\tTRUE\tFALSE\tFALSE\tShelley
+Sugar We're Goin Down\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+Sweetness\tTRUE\tFALSE\tFALSE\tFALSE\tTom
+Tennessee Whiskey\tFALSE\tFALSE\tTRUE\tTRUE\tDavid
+The Way You Make Me Feel\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Tipsy\tTRUE\tFALSE\tFALSE\tTRUE\tDavid
+Toxic\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+Treasure\tFALSE\tTRUE\tFALSE\tTRUE\tDavid
+Uptown Funk\tFALSE\tTRUE\tTRUE\tTRUE\tDavid
+Valerie\tFALSE\tTRUE\tFALSE\tFALSE\tShelley
+Wagon Wheel\tFALSE\tFALSE\tFALSE\tTRUE\tDavid
+Watermelon Sugar\tTRUE\tFALSE\tTRUE\tTRUE\tDavid
+What's Up?\tFALSE\tTRUE\tTRUE\tFALSE\tShelley
+Wish I Knew You\tTRUE\tFALSE\tFALSE\tTRUE\tDavid`;
+
+function normalizeTitle(str) {
+  return (str || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function truthy(cell) {
+  return ['y', 'yes', 'true', 'x', '1'].includes((cell || '').trim().toLowerCase());
+}
+
+function parseVocalTable(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const rows = lines.slice(1); // skip header row
+  return rows.map(line => {
+    let cells = line.split('\t');
+    if (cells.length < 6) cells = line.split(/\s{2,}/); // fallback for space-aligned paste
+    const [title, tom, shelley, kelsey, david, preferred] = cells;
+    return {
+      title: (title || '').trim(),
+      capability: { Tom: truthy(tom), Shelley: truthy(shelley), Kelsey: truthy(kelsey), David: truthy(david) },
+      preferred: LEAD_VOCALISTS.find(v => v.toLowerCase() === (preferred || '').trim().toLowerCase()) || '',
+    };
+  }).filter(r => r.title);
+}
+
+function matchVocalRows(rows, dbSongs) {
+  const byTitle = new Map();
+  for (const s of dbSongs) {
+    const t = normalizeTitle(s.title || s.name || '');
+    if (!t) continue;
+    if (!byTitle.has(t)) byTitle.set(t, []);
+    byTitle.get(t).push(s);
+  }
+  const matched = [], unmatched = [], ambiguous = [];
+  rows.forEach((row, i) => {
+    const candidates = byTitle.get(normalizeTitle(row.title)) || [];
+    const entry = { ...row, key: i, songId: candidates.length === 1 ? candidates[0].id : '' };
+    if (candidates.length === 1) matched.push(entry);
+    else if (candidates.length === 0) unmatched.push(entry);
+    else ambiguous.push(entry);
+  });
+  return { matched, unmatched, ambiguous };
 }
 
 function uuid() {
@@ -194,7 +297,18 @@ function SongRow({ song, isActive, onSelect }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────
+// The song library includes full lyrics/chords, so — unlike setlists, which
+// have a deliberate public share view — this page has no anonymous use case
+// and is gated behind login just like Clients/Shows/Requests.
 export default function SongManager() {
+  return (
+    <AuthGuard>
+      <SongManagerInner />
+    </AuthGuard>
+  );
+}
+
+function SongManagerInner() {
   const { user } = useAuth();
   const { data: songs = [] } = useSongs();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
@@ -219,6 +333,10 @@ export default function SongManager() {
   const [syncing, setSyncing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showImportTrigger, setShowImportTrigger] = useState(false);
+  const [vocalImportOpen, setVocalImportOpen] = useState(false);
+  const [vocalImportText, setVocalImportText] = useState(DEFAULT_VOCAL_TABLE);
+  const [vocalImportPreview, setVocalImportPreview] = useState(null);
+  const [vocalImportSyncing, setVocalImportSyncing] = useState(false);
   const [pdfPanelOpen, setPdfPanelOpen] = useState(false);
   const [pdfOpts, setPdfOpts] = useState({ background: 'light', fontSize: 'md', orientation: 'portrait' });
   const dragCounterRef = useRef(0);
@@ -284,6 +402,8 @@ export default function SongManager() {
       lyrics: selected.lyrics || '',
       notes: typeof selected.notes === 'string' ? selected.notes : (selected.notes || []).join('\n'),
       showOnWebsite: selected.showOnWebsite || false,
+      vocalCapability: selected.vocalCapability || {},
+      preferredVocalist: selected.preferredVocalist || '',
     });
     setMode('edit');
   }
@@ -303,6 +423,7 @@ export default function SongManager() {
       if (!data.genre) delete data.genre;
       if (!data.chartUrl) delete data.chartUrl;
       if (!data.notes) delete data.notes;
+      if (!data.preferredVocalist) delete data.preferredVocalist;
       await saveSong(data);
       setIsDirty(false);
       setIsNewSong(false);
@@ -327,7 +448,7 @@ export default function SongManager() {
     const id = uuid();
     setIsNewSong(true);
     setIsDirty(true);
-    setEditFormState({ title: '', artist: '', genre: '', key: '', capo: 0, eflat: false, dropD: false, chartUrl: '', lyrics: '', notes: '', showOnWebsite: false });
+    setEditFormState({ title: '', artist: '', genre: '', key: '', capo: 0, eflat: false, dropD: false, chartUrl: '', lyrics: '', notes: '', showOnWebsite: false, vocalCapability: {}, preferredVocalist: '' });
     setMode('edit');
     setSearchParams({ id }, { replace: false });
   }
@@ -389,6 +510,37 @@ export default function SongManager() {
       alert(`Sync complete. ${count} operation(s) executed.`);
     } catch (err) { alert('Sync failed: ' + err.message); }
     finally { setSyncing(false); }
+  }
+
+  // ── Vocalist capability import ────────────────────────────────────────
+  async function parseVocalImport() {
+    const rows = parseVocalTable(vocalImportText);
+    if (rows.length === 0) { alert('No rows found — check the pasted data.'); return; }
+    const dbSongs = await getSongs();
+    setVocalImportPreview(matchVocalRows(rows, dbSongs));
+  }
+
+  function resolveVocalRow(bucket, key, songId) {
+    setVocalImportPreview(prev => ({
+      ...prev,
+      [bucket]: prev[bucket].map(r => r.key === key ? { ...r, songId } : r),
+    }));
+  }
+
+  async function executeVocalImport() {
+    if (!vocalImportPreview) return;
+    const resolved = [...vocalImportPreview.matched, ...vocalImportPreview.unmatched, ...vocalImportPreview.ambiguous]
+      .filter(r => r.songId);
+    if (resolved.length === 0) { alert('Nothing to import.'); return; }
+    setVocalImportSyncing(true);
+    try {
+      const updates = resolved.map(r => ({ id: r.songId, data: { vocalCapability: r.capability, preferredVocalist: r.preferred } }));
+      const count = await syncSongsBatch([], updates, []);
+      setVocalImportOpen(false);
+      setVocalImportPreview(null);
+      alert(`Vocalist data updated for ${count} song(s).`);
+    } catch (err) { alert('Import failed: ' + err.message); }
+    finally { setVocalImportSyncing(false); }
   }
 
   const handleDragEnter = useCallback(e => {
@@ -454,6 +606,15 @@ export default function SongManager() {
             title="Import from AbleSet"
           >
             <i className="fas fa-file-import text-xs" />
+          </button>
+        )}
+        {user && (
+          <button
+            onClick={() => { setVocalImportPreview(null); setVocalImportOpen(true); }}
+            className="shrink-0 p-2 text-[#888] hover:text-white bg-[#121212] border border-[#2a2a2a] rounded-lg transition-colors"
+            title="Import Vocalist Capability Table"
+          >
+            <i className="fas fa-microphone-lines text-xs" />
           </button>
         )}
       </div>
@@ -776,6 +937,115 @@ export default function SongManager() {
         </div>
       )}
 
+      {/* Vocalist Capability Import Modal */}
+      {vocalImportOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={e => { if (e.target === e.currentTarget) setVocalImportOpen(false); }}
+        >
+          <div className="bg-[#1a1a1a] w-full max-w-2xl rounded-xl shadow-2xl border border-[#2a2a2a] overflow-hidden max-h-[85vh] flex flex-col">
+            <div className="shrink-0 px-5 py-4 border-b border-[#2a2a2a] flex justify-between items-center">
+              <p className="text-base font-bold text-white"><i className="fas fa-microphone-lines text-[#22c55e] mr-2" />Import Vocalist Capability Table</p>
+              <button onClick={() => setVocalImportOpen(false)} className="text-[#888] hover:text-white p-1">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            {!vocalImportPreview ? (
+              <>
+                <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                  <p className="text-xs text-[#888]">
+                    Tab-separated: <code className="bg-[#2a2a2a] px-1 rounded">Song Name, Tom, Shelley, Kelsey, David, Preferred</code>. Paste updated data to re-run.
+                  </p>
+                  <textarea
+                    rows={16}
+                    value={vocalImportText}
+                    onChange={e => setVocalImportText(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs font-mono resize-y focus:outline-none focus:border-[#22c55e]"
+                  />
+                </div>
+                <div className="shrink-0 border-t border-[#2a2a2a] px-5 py-3 flex gap-3 justify-end">
+                  <button onClick={() => setVocalImportOpen(false)} className="px-4 py-2 bg-[#2a2a2a] rounded-lg text-white hover:bg-[#333] text-sm font-semibold transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={parseVocalImport} className="px-4 py-2 bg-[#16a34a] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
+                    <i className="fas fa-magnifying-glass" />Parse & Match
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto p-5">
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    {[
+                      { label: 'Matched', color: '#22c55e', count: vocalImportPreview.matched.length },
+                      { label: 'Unmatched', color: '#f59e0b', count: vocalImportPreview.unmatched.length },
+                      { label: 'Ambiguous', color: '#ef4444', count: vocalImportPreview.ambiguous.length },
+                    ].map(({ label, color, count }) => (
+                      <div key={label} className="rounded-lg p-3 text-center border" style={{ borderColor: `${color}33`, background: `${color}10` }}>
+                        <div className="text-2xl font-bold" style={{ color }}>{count}</div>
+                        <div className="text-xs font-semibold uppercase mt-1" style={{ color }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {vocalImportPreview.matched.length > 0 && (
+                    <DiffSection title="Matched" color="#22c55e" icon="fa-check-circle">
+                      {vocalImportPreview.matched.map(r => (
+                        <DiffRow key={r.key} meta={r.preferred || undefined}>{r.title}</DiffRow>
+                      ))}
+                    </DiffSection>
+                  )}
+
+                  {(vocalImportPreview.unmatched.length > 0 || vocalImportPreview.ambiguous.length > 0) && (
+                    <div className="mb-4">
+                      <h4 className="text-xs font-bold mb-2 flex items-center gap-1.5 text-[#f59e0b]">
+                        <i className="fas fa-triangle-exclamation" />Needs Review
+                      </h4>
+                      <div className="space-y-1.5">
+                        {[...vocalImportPreview.unmatched, ...vocalImportPreview.ambiguous].map(r => {
+                          const bucket = vocalImportPreview.unmatched.includes(r) ? 'unmatched' : 'ambiguous';
+                          return (
+                            <div key={r.key} className="flex items-center justify-between gap-3 px-3 py-1.5 bg-[#121212] rounded text-sm">
+                              <span className="text-white truncate flex-1">{r.title}</span>
+                              <select
+                                value={r.songId}
+                                onChange={e => resolveVocalRow(bucket, r.key, e.target.value)}
+                                className="px-2 py-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded text-white text-xs focus:outline-none focus:border-[#22c55e]"
+                                style={{ maxWidth: 220 }}
+                              >
+                                <option value="">— Skip —</option>
+                                {songs.map(s => <option key={s.id} value={s.id}>{s.title || s.name}</option>)}
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-[#555] text-xs mt-3">
+                    <i className="fas fa-info-circle mr-1" />Only rows with a matched song will be written; ambiguous rows must be resolved or skipped.
+                  </p>
+                </div>
+                <div className="shrink-0 border-t border-[#2a2a2a] px-5 py-3 flex gap-3 justify-end">
+                  <button onClick={() => setVocalImportPreview(null)} className="px-4 py-2 bg-[#2a2a2a] rounded-lg text-white hover:bg-[#333] text-sm font-semibold transition-colors">
+                    Back
+                  </button>
+                  <button
+                    onClick={executeVocalImport}
+                    disabled={vocalImportSyncing || vocalImportPreview.ambiguous.some(r => !r.songId)}
+                    className="px-4 py-2 bg-[#16a34a] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <i className="fas fa-check" />{vocalImportSyncing ? 'Importing...' : 'Confirm Import'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <input ref={fileInputRef} type="file" accept=".json,.ableset" className="hidden" onChange={e => { const f = e.target.files[0]; if (f) handleFileImport(f); e.target.value = ''; }} />
     </AdminShell>
   );
@@ -862,6 +1132,24 @@ function SongForm({ form, setField }) {
       </div>
       <Field label="Chart URL (PDF)">
         <input type="url" value={form.chartUrl || ''} onChange={e => setField('chartUrl', e.target.value)} className={INPUT} placeholder="https://..." />
+      </Field>
+      <Field label="Can Sing Lead">
+        <div className="flex flex-wrap gap-5">
+          {LEAD_VOCALISTS.map(v => (
+            <CheckField
+              key={v}
+              label={v}
+              checked={!!form.vocalCapability?.[v]}
+              onChange={val => setField('vocalCapability', { ...form.vocalCapability, [v]: val })}
+            />
+          ))}
+        </div>
+      </Field>
+      <Field label="Preferred Vocalist">
+        <select value={form.preferredVocalist || ''} onChange={e => setField('preferredVocalist', e.target.value)} className={INPUT} style={{ maxWidth: 220 }}>
+          <option value="">— None —</option>
+          {LEAD_VOCALISTS.map(v => <option key={v} value={v}>{v}</option>)}
+        </select>
       </Field>
       <Field label="Lyrics">
         <p className="text-xs text-[#555] mb-1.5">

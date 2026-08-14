@@ -5,15 +5,9 @@ import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import { useShows, useSetlists, useClients, useMemberProfiles } from '../firebase/useFirestore.js';
 import MemberAvatar from '../components/MemberAvatar.jsx';
-import { saveShow, deleteShow } from '../firestore-service.js';
+import { saveShow, deleteShow, saveSetlist, duplicateSetlist } from '../firestore-service.js';
 import { slugify, makeUniqueSlug } from '../utils.js';
-
-// ── Constants ──────────────────────────────────────────────────────────────
-const PERSONNEL = ['Anthony', 'Tom', 'Lester', 'David', 'Shelley', 'Kelsey'];
-const PERSONNEL_COLORS = {
-  Anthony: '#f59e0b', Tom: '#22c55e', Lester: '#a78bfa',
-  David: '#e879f9', Shelley: '#fb923c', Kelsey: '#38bdf8',
-};
+import { PERSONNEL, PERSONNEL_COLORS } from '../constants/band.js';
 
 const ACCENT    = '#a78bfa';
 const ACCENT_BG = '#7c3aed';
@@ -169,6 +163,17 @@ function ShowManager() {
   const [showSearch, setShowSearch] = useState('');
   const [showYear, setShowYear] = useState(() => localStorage.getItem('sm_showYear') ?? String(new Date().getFullYear()));
   const [showSortDir, setShowSortDir] = useState('asc');
+  const [personnelFilter, setPersonnelFilter] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sm_personnelFilter') || '[]'); } catch { return []; }
+  });
+
+  function togglePersonnelFilter(name) {
+    setPersonnelFilter(prev => {
+      const next = prev.includes(name) ? prev.filter(p => p !== name) : [...prev, name];
+      localStorage.setItem('sm_personnelFilter', JSON.stringify(next));
+      return next;
+    });
+  }
   const [monthAccordion, setMonthAccordion] = useState(() => {
     try { return JSON.parse(localStorage.getItem('sm_accordion') || '{}'); } catch { return {}; }
   });
@@ -240,6 +245,7 @@ function ShowManager() {
     .filter(s => {
       const yr = extractYear(s.date) || '';
       if (showYear && yr !== showYear) return false;
+      if (personnelFilter.length > 0 && !(s.personnel || []).some(p => personnelFilter.includes(p))) return false;
       const text = `${s.venue || ''} ${s.city || ''} ${s.state || ''}`.toLowerCase();
       return text.includes(showSearch.toLowerCase());
     })
@@ -341,14 +347,23 @@ function ShowManager() {
     if (!showForm.date) { alert('Date is required.'); return; }
     setSavingShow(true);
     try {
+      const { _pendingSetlist, ...cleanForm } = showForm;
+      if (_pendingSetlist) {
+        if (!_pendingSetlist.name?.trim()) throw new Error('Setlist name is required.');
+        if (_pendingSetlist.type === 'copy' && !_pendingSetlist.sourceId) throw new Error('Choose a template setlist.');
+        const newSetlistId = makeUniqueSlug(_pendingSetlist.name, new Set(setlists.map(s => s.id)));
+        if (_pendingSetlist.type === 'blank') await saveSetlist(newSetlistId, _pendingSetlist.name, [], {});
+        else await duplicateSetlist(newSetlistId, _pendingSetlist.name, _pendingSetlist.sourceId);
+        cleanForm.setlistId = newSetlistId;
+      }
       // On first save of a new show, swap the temp UUID for a slug based on venue + date
-      const isNew = !allShows.find(s => s.id === showForm.id);
-      let saveId = showForm.id;
+      const isNew = !allShows.find(s => s.id === cleanForm.id);
+      let saveId = cleanForm.id;
       if (isNew) {
-        const base = [showForm.venue, showForm.date].filter(Boolean).join('-');
+        const base = [cleanForm.venue, cleanForm.date].filter(Boolean).join('-');
         saveId = makeUniqueSlug(base || 'show', new Set(allShows.map(s => s.id)));
       }
-      await saveShow({ ...showForm, id: saveId, updatedAt: new Date().toISOString() });
+      await saveShow({ ...cleanForm, id: saveId, updatedAt: new Date().toISOString() });
       setShowEditMode(false);
       setShowDirty(false);
       setSearchParams({ show: saveId }, { replace: true });
@@ -396,6 +411,28 @@ function ShowManager() {
             <option value="desc">Newest first</option>
             <option value="asc">Oldest first</option>
           </select>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PERSONNEL.map(p => {
+            const selected = personnelFilter.includes(p);
+            const color = PERSONNEL_COLORS[p];
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => togglePersonnelFilter(p)}
+                title={`Filter to shows with ${p}`}
+                className="flex items-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-semibold transition-all"
+                style={selected
+                  ? { background: `${color}25`, color, border: `1px solid ${color}60` }
+                  : { color: '#888', border: '1px solid #2a2a2a' }
+                }
+              >
+                <MemberAvatar name={p} profiles={memberProfiles} color={color} size={14} />
+                {p}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -819,10 +856,75 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
         <input type="url" value={form.eventLink || ''} onChange={e => setField('eventLink', e.target.value)} className={INPUT} placeholder="https://..." />
       </FormField>
       <FormField label="Setlist">
-        <select value={form.setlistId || ''} onChange={e => setField('setlistId', e.target.value)} className={SELECT}>
-          <option value="">— Select setlist —</option>
-          {setlists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        {form.setlistId ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex-1 min-w-0 px-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm truncate">
+              {setlists.find(s => s.id === form.setlistId)?.name || form.setlistId}
+            </span>
+            <a
+              href={`/setlists?id=${form.setlistId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 text-xs font-semibold text-[#a78bfa] hover:underline whitespace-nowrap"
+            >
+              Open <i className="fas fa-arrow-up-right-from-square text-[10px] ml-0.5" />
+            </a>
+            <button
+              type="button"
+              onClick={() => setField('setlistId', '')}
+              className="px-3 py-2 text-xs font-semibold text-[#888] hover:text-white transition-colors whitespace-nowrap"
+            >
+              Unlink
+            </button>
+          </div>
+        ) : form._pendingSetlist ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={form._pendingSetlist.name}
+              onChange={e => setField('_pendingSetlist', { ...form._pendingSetlist, name: e.target.value })}
+              placeholder="Setlist name"
+              className={INPUT}
+            />
+            {form._pendingSetlist.type === 'copy' && (
+              <select
+                value={form._pendingSetlist.sourceId || ''}
+                onChange={e => setField('_pendingSetlist', { ...form._pendingSetlist, sourceId: e.target.value })}
+                className={SELECT}
+              >
+                <option value="">— Choose a setlist to copy —</option>
+                {setlists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+            <div className="flex items-center gap-2">
+              <p className="flex-1 text-xs text-[#555]">Will be created when you save this show.</p>
+              <button
+                type="button"
+                onClick={() => setField('_pendingSetlist', null)}
+                className="px-3 py-1.5 text-xs font-semibold text-[#888] hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setField('_pendingSetlist', { type: 'blank', name: form.venue ? `${form.venue} Setlist` : 'New Setlist' })}
+              className="px-3 py-2 bg-[#7c3aed]/15 border border-[#7c3aed]/40 text-[#a78bfa] rounded-lg text-xs font-semibold hover:bg-[#7c3aed]/25 transition-colors"
+            >
+              <i className="fas fa-plus mr-1.5" />New Blank Setlist
+            </button>
+            <button
+              type="button"
+              onClick={() => setField('_pendingSetlist', { type: 'copy', name: form.venue ? `${form.venue} Setlist` : 'New Setlist', sourceId: '' })}
+              className="px-3 py-2 text-[#888] hover:text-white border border-[#2a2a2a] rounded-lg text-xs font-semibold transition-colors"
+            >
+              <i className="fas fa-copy mr-1.5" />Copy From Template
+            </button>
+          </div>
+        )}
       </FormField>
       <FormField label="Itinerary">
         <textarea rows={4} value={form.itinerary || ''} onChange={e => setField('itinerary', e.target.value)} className={INPUT + ' resize-y'} placeholder="Load-in at 6pm, soundcheck 7pm..." />

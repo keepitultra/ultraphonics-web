@@ -4,16 +4,10 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import Sortable from 'sortablejs';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
-import { useSetlists, useSongs, useMemberProfiles } from '../firebase/useFirestore.js';
+import { useSetlists, useSetlist, useSongs, useShows } from '../firebase/useFirestore.js';
 import MemberAvatar from '../components/MemberAvatar.jsx';
-import { saveSetlist, deleteSetlist, updateSong } from '../firestore-service.js';
-
-// ── Constants ─────────────────────────────────────────────────────────────
-const VOCALISTS = ['Anthony', 'Tom', 'Lester', 'David', 'Shelley', 'Kelsey'];
-const VOCALIST_COLORS = {
-  Anthony: '#f59e0b', Tom: '#22c55e', Lester: '#a78bfa',
-  David: '#e879f9', Shelley: '#fb923c', Kelsey: '#38bdf8',
-};
+import { saveSetlist, deleteSetlist } from '../firestore-service.js';
+import { PERSONNEL as VOCALISTS, PERSONNEL_COLORS as VOCALIST_COLORS, LEAD_VOCALISTS, GUEST_COLOR } from '../constants/band.js';
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -52,17 +46,112 @@ function generateStats(songs) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────
+// Anonymous visitors only ever get a name-labeled share link (?id=...) and
+// can never browse the setlist library, so they're routed to a stripped-down
+// read-only view instead of the full admin builder below.
 export default function SetlistManager() {
+  const { user, loading: authLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const selectedId = searchParams.get('id');
+
+  if (authLoading) {
+    return <div className="min-h-screen bg-[#121212]" />;
+  }
+
+  if (!user) {
+    return <PublicSetlistView id={selectedId} />;
+  }
+
+  return <AdminSetlistManager />;
+}
+
+// ── Public read-only view ───────────────────────────────────────────────
+// No login prompt, no list of other setlists, no library — just the one
+// setlist a band member explicitly shared via its id.
+function PublicSetlistView({ id }) {
+  const navigate = useNavigate();
+  const { data: setlist, loading, error } = useSetlist(id);
+
+  useEffect(() => {
+    if (!id) { navigate('/', { replace: true }); return; }
+    if (!loading && (error || !setlist)) { navigate('/', { replace: true }); }
+  }, [id, loading, error, setlist, navigate]);
+
+  if (!id || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#121212]">
+        {loading && <p className="text-[#555] text-sm">Loading setlist…</p>}
+      </div>
+    );
+  }
+
+  if (!setlist) return null; // redirecting home
+
+  const songs = setlist.songs || [];
+  const stats = generateStats(songs);
+
+  return (
+    <div className="min-h-screen bg-[#121212] text-white flex flex-col text-left">
+      <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-3">
+        <Link to="/" className="shrink-0">
+          <img src="/images/Ultraphonics-Spiral-512.png" alt="Ultraphonics" className="h-7 w-7" />
+        </Link>
+        <p className="flex-1 min-w-0 text-sm font-bold text-white truncate">{setlist.name}</p>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-2xl mx-auto">
+          {songs.length === 0 && (
+            <div className="py-16 text-center text-[#555]">
+              <i className="fas fa-music text-4xl mb-3 block opacity-20" />
+              <p className="text-sm">This setlist is empty</p>
+            </div>
+          )}
+          {songs.map((song, idx) => {
+            if (isSetMarker(song)) {
+              return (
+                <div key={`${song.id}-${idx}`} className="px-4 py-2.5 border-b border-[#2a2a2a] bg-[#1a1a1a]">
+                  <span className="text-sm font-bold text-[#888] uppercase tracking-wide">
+                    {cleanSetName(song.title || song.lastKnownName)}
+                  </span>
+                </div>
+              );
+            }
+            const vocalist = setlist.vocalAssignments?.[song.id];
+            const vocalistColor = vocalist ? (VOCALIST_COLORS[vocalist] || GUEST_COLOR) : undefined;
+            return (
+              <div key={`${song.id}-${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#2a2a2a]">
+                <span className="min-w-0 text-sm text-white font-medium truncate">{song.title || song.lastKnownName}</span>
+                {vocalist && <MemberAvatar name={vocalist} color={vocalistColor} size={20} />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {songs.length > 0 && (
+        <div className="shrink-0 px-4 py-2 border-t border-[#2a2a2a] bg-[#1a1a1a] text-center">
+          <span className="text-xs text-[#888] font-mono">{stats}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Admin builder ────────────────────────────────────────────────────────
+function AdminSetlistManager() {
   const { user } = useAuth();
   const { data: setlists = [] } = useSetlists();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { data: allSongs = [] } = useSongs();
-  const memberProfiles = useMemberProfiles();
+  const { data: allShows = [] } = useShows();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const selectedId = searchParams.get('id');
   const triggerNew = searchParams.get('new') === '1';
+  // Which gig (if any) this setlist is dedicated to — drives Auto-Assign and the warning badges
+  const linkedShow = allShows.find(s => s.setlistId === selectedId) || null;
 
   // Setlist state
   const [setlistSongs, setSetlistSongs] = useState(/** @type {any[]} */ ([]));
@@ -251,6 +340,53 @@ export default function SetlistManager() {
     setIsDirty(true);
   }
 
+  // Recompute every band-member vocal assignment from who's actually on the gig's
+  // roster. Manually-cast guests (names outside LEAD_VOCALISTS) are left alone.
+  function handleAutoAssign() {
+    if (!linkedShow) return;
+    if (Object.keys(vocalAssignments).length > 0 && !window.confirm('Recompute singer assignments based on this gig\'s lineup? Existing picks (except guests) will be replaced.')) return;
+    const present = new Set(linkedShow.personnel || []);
+    const next = { ...vocalAssignments };
+    let attempted = 0, assigned = 0, unresolved = 0, missingData = 0;
+    for (const song of setlistSongs) {
+      if (isSetMarker(song)) continue;
+      const current = next[song.id];
+      if (current && !LEAD_VOCALISTS.includes(current)) continue; // preserve manual guest casting
+      const songDoc = allSongs.find(s => s.id === song.id);
+      if (!songDoc) continue;
+      attempted++;
+      if (!songDoc.preferredVocalist && !songDoc.vocalCapability) missingData++;
+      const preferred = songDoc.preferredVocalist;
+      if (preferred && present.has(preferred)) { next[song.id] = preferred; assigned++; continue; }
+      const capable = LEAD_VOCALISTS.filter(v => present.has(v) && songDoc.vocalCapability?.[v]);
+      if (capable.length > 0) { next[song.id] = capable[0]; assigned++; }
+      else { delete next[song.id]; unresolved++; }
+    }
+    setVocalAssignments(next);
+    setIsDirty(true);
+
+    // Auto-assign can legitimately compute "nothing changed" (no capability data yet,
+    // no one on the roster, or every song already has a manual guest) — say so explicitly
+    // instead of leaving it looking like the button did nothing.
+    if (attempted === 0) {
+      alert('Nothing to auto-assign — every song already has a manually-assigned guest vocalist.');
+    } else if (missingData === attempted) {
+      alert(`None of the ${attempted} song(s) in this setlist have vocalist capability data yet. Go to Songs → the mic icon above the song list to import the capability table, then try again.`);
+    } else if (present.size === 0) {
+      alert('Nobody is marked as playing this gig yet. Add personnel on the show first, then re-run Auto-Assign.');
+    } else {
+      alert(`Assigned ${assigned} song(s).${unresolved ? ` ${unresolved} song(s) have no available singer for this lineup — look for the amber warning icon.` : ' All songs covered.'}`);
+    }
+  }
+
+  // A song has no viable singer for this gig: linked to a show, nobody assigned yet,
+  // and nobody present is marked capable of it.
+  function hasNoAssignmentWarning(song, songDoc) {
+    if (!linkedShow || vocalAssignments[song.id]) return false;
+    const present = new Set(linkedShow.personnel || []);
+    return !LEAD_VOCALISTS.some(v => present.has(v) && songDoc?.vocalCapability?.[v]);
+  }
+
   function handleShare() {
     const url = `${window.location.origin}/setlists?id=${selectedId}`;
     if (navigator.share) {
@@ -431,7 +567,8 @@ export default function SetlistManager() {
   const rightPanel = (
     <div className="flex flex-col overflow-hidden bg-[#121212]">
       {/* Header — only shown when a setlist is loaded */}
-      {hasSetlist && <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2">
+      {hasSetlist && <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a]">
+      <div className="flex items-center gap-2">
         {/* Name */}
         {editingName && user ? (
           <input
@@ -461,14 +598,21 @@ export default function SetlistManager() {
             <IconBtn onClick={handleDownloadJson} icon="fa-download" title="Download JSON" />
             {user && (
               <>
-                <IconBtn
+                <button
                   onClick={() => { setViewMode(v => !v); }}
-                  icon={viewMode ? 'fa-pen-to-square' : 'fa-eye'}
-                  title={viewMode ? 'Switch to Edit' : 'Switch to View'}
-                  active={!viewMode}
-                />
+                  title={viewMode ? 'Currently viewing — click to edit' : 'Currently editing — click to stop'}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                    viewMode
+                      ? 'text-[#888] hover:text-white hover:bg-white/5'
+                      : 'bg-[#3b82f6]/15 text-[#3b82f6] border border-[#3b82f6]/40'
+                  }`}
+                >
+                  <i className={`fas ${viewMode ? 'fa-eye' : 'fa-pen-to-square'}`} />
+                  {viewMode ? 'Viewing' : 'Editing'}
+                </button>
                 {!viewMode && (
                   <>
+                    {linkedShow && <IconBtn onClick={handleAutoAssign} icon="fa-wand-magic-sparkles" title="Auto-Assign Vocalists" />}
                     <IconBtn onClick={handleDuplicate} icon="fa-copy" title="Duplicate" />
                     <button
                       onClick={handleSave}
@@ -491,6 +635,13 @@ export default function SetlistManager() {
             )}
           </div>
         )}
+      </div>
+      {linkedShow && (
+        <Link to={`/shows?show=${linkedShow.id}`} className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] text-[#888] hover:text-[#3b82f6] transition-colors">
+          <i className="fas fa-calendar-days" />
+          {[linkedShow.venue, linkedShow.date].filter(Boolean).join(' — ') || 'Linked show'}
+        </Link>
+      )}
       </div>}
 
       {/* Setlist body */}
@@ -523,8 +674,9 @@ export default function SetlistManager() {
           {setlistSongs.map((song, idx) => {
             const marker = isSetMarker(song);
             const vocalist = vocalAssignments[song.id];
-            const vocalistColor = VOCALIST_COLORS[vocalist];
+            const vocalistColor = vocalist ? (VOCALIST_COLORS[vocalist] || GUEST_COLOR) : undefined;
             const hasSegue = segues[song.id];
+            const songDoc = allSongs.find(x => x.id === song.id);
 
             if (marker) {
               return (
@@ -574,31 +726,36 @@ export default function SetlistManager() {
 
                 {/* Indicators */}
                 <div className="flex items-center gap-1.5 justify-end">
-                  {vocalist && (
-                    <MemberAvatar name={vocalist} profiles={memberProfiles} color={vocalistColor} size={20} />
+                  {viewMode && vocalist && (
+                    <MemberAvatar name={vocalist} color={vocalistColor} size={20} />
                   )}
-                  {(() => {
-                    const s = allSongs.find(x => x.id === song.id);
-                    if (!s) return null;
-                    return (
-                      <>
-                        {s.eflat && <TinyBadge color="#a78bfa">Eb</TinyBadge>}
-                        {s.dropD && <TinyBadge color="#818cf8">Drop</TinyBadge>}
-                        {s.capo > 0 && <TinyBadge color="#f59e0b">Capo {s.capo}</TinyBadge>}
-                      </>
-                    );
-                  })()}
+                  {songDoc && (
+                    <>
+                      {songDoc.eflat && <TinyBadge color="#a78bfa">Eb</TinyBadge>}
+                      {songDoc.dropD && <TinyBadge color="#818cf8">Drop</TinyBadge>}
+                      {songDoc.capo > 0 && <TinyBadge color="#f59e0b">Capo {songDoc.capo}</TinyBadge>}
+                    </>
+                  )}
                   {hasSegue && <TinyBadge color="#3b82f6">~</TinyBadge>}
+                  {viewMode && hasNoAssignmentWarning(song, songDoc) && (
+                    <i className="fas fa-triangle-exclamation text-amber-400 text-xs" title="No present singer capable of this song" />
+                  )}
                 </div>
 
                 {!viewMode && user && (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setPropsModalSong({ song, idx })}
-                      className="p-1.5 text-[#555] hover:text-white transition-colors rounded"
-                      title="Song properties"
+                      className="rounded-full hover:ring-2 hover:ring-white/20 transition-all"
+                      title={vocalist ? `Vocalist: ${vocalist} — click to change` : 'No vocalist assigned — click to assign'}
                     >
-                      <i className="fas fa-pen text-xs" />
+                      {vocalist ? (
+                        <MemberAvatar name={vocalist} color={vocalistColor} size={22} />
+                      ) : (
+                        <span className="w-[22px] h-[22px] flex items-center justify-center rounded-full bg-amber-400/15 border border-amber-400/50">
+                          <i className="fas fa-triangle-exclamation text-amber-400 text-[10px]" />
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => removeFromSetlist(idx)}
@@ -637,9 +794,9 @@ export default function SetlistManager() {
         <SongPropertiesModal
           song={propsModalSong.song}
           idx={propsModalSong.idx}
-          allSongs={allSongs}
           vocalAssignments={vocalAssignments}
           segues={segues}
+          guestOptions={(linkedShow?.personnel || []).filter(p => !VOCALISTS.includes(p))}
           onSaveLocal={(songId, { vocalist, segue }) => {
             setVocalAssignments(prev => {
               const next = { ...prev };
@@ -655,10 +812,6 @@ export default function SetlistManager() {
             });
             setIsDirty(true);
           }}
-          onSaveGlobal={async (songId, data) => {
-            await updateSong(songId, data);
-          }}
-          memberProfiles={memberProfiles}
           onClose={() => setPropsModalSong(null)}
         />
       )}
@@ -699,23 +852,16 @@ function TinyBadge({ children, color }) {
 }
 
 // ── Song Properties Modal ─────────────────────────────────────────────────
-function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveLocal, onSaveGlobal, onClose, memberProfiles = {} }) {
-  const songData = allSongs.find(s => s.id === song.id) || {};
+// Capo/tuning are global song properties, edited on the Songs page — this
+// modal only handles what's specific to this one setlist: who's singing it
+// and whether it segues into the next song.
+function SongPropertiesModal({ song, vocalAssignments, segues, guestOptions = [], onSaveLocal, onClose }) {
   const [vocalist, setVocalist] = useState(vocalAssignments[song.id] || '');
   const [segue, setSegue] = useState(!!segues[song.id]);
-  const [capo, setCapo] = useState(songData.capo ?? 0);
-  const [dropD, setDropD] = useState(songData.dropD || false);
-  const [eflat, setEflat] = useState(songData.eflat || false);
-  const [saving, setSaving] = useState(false);
 
-  async function handleSave() {
-    setSaving(true);
-    try {
-      onSaveLocal(song.id, { vocalist, segue });
-      await onSaveGlobal(song.id, { capo: parseInt(capo) || 0, dropD, eflat });
-      onClose();
-    } catch (err) { alert('Save failed: ' + err.message); }
-    finally { setSaving(false); }
+  function handleSave() {
+    onSaveLocal(song.id, { vocalist, segue });
+    onClose();
   }
 
   return (
@@ -755,12 +901,32 @@ function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveL
                       : { color: '#888', border: '1px solid transparent' }
                     }
                   >
-                    <MemberAvatar name={v} profiles={memberProfiles} color={color} size={20} />
+                    <MemberAvatar name={v} color={color} size={20} />
                     {v}
                   </button>
                 );
               })}
+              {guestOptions.map(g => {
+                const isActive = vocalist === g;
+                return (
+                  <button
+                    key={g}
+                    onClick={() => setVocalist(g)}
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={isActive
+                      ? { background: `${GUEST_COLOR}30`, color: GUEST_COLOR, border: `1px solid ${GUEST_COLOR}60` }
+                      : { color: '#888', border: '1px solid transparent' }
+                    }
+                  >
+                    <i className="fas fa-user-music text-[10px]" />
+                    {g}
+                  </button>
+                );
+              })}
             </div>
+            {guestOptions.length === 0 && (
+              <p className="text-[10px] text-[#555] mt-1.5">Add guest musicians on this gig's show to offer them here.</p>
+            )}
           </div>
 
           {/* Segue */}
@@ -773,28 +939,6 @@ function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveL
             </div>
             <span className="text-sm text-[#ccc]">Segue into next song</span>
           </label>
-
-          <div className="border-t border-[#2a2a2a] pt-4">
-            <p className="text-xs text-[#888] uppercase tracking-wider font-semibold mb-3">Global Song Settings</p>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-[#ccc] w-16 shrink-0">Capo</label>
-                <input
-                  type="number" min="0" max="12" value={capo}
-                  onChange={e => setCapo(e.target.value)}
-                  className="w-20 px-3 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#3b82f6]"
-                />
-              </div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={dropD} onChange={e => setDropD(e.target.checked)} className="w-4 h-4 rounded accent-[#1d4ed8]" />
-                <span className="text-sm text-[#ccc]">Drop D</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={eflat} onChange={e => setEflat(e.target.checked)} className="w-4 h-4 rounded accent-[#1d4ed8]" />
-                <span className="text-sm text-[#ccc]">Eb tuning</span>
-              </label>
-            </div>
-          </div>
         </div>
 
         <div className="border-t border-[#2a2a2a] px-5 py-3 flex gap-3 justify-end">
@@ -803,10 +947,9 @@ function SongPropertiesModal({ song, allSongs, vocalAssignments, segues, onSaveL
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 bg-[#1d4ed8] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-[#1d4ed8] hover:bg-[#00a8a9] text-white rounded-lg text-sm font-semibold transition-colors"
           >
-            {saving ? 'Saving...' : 'Save'}
+            Save
           </button>
         </div>
       </div>

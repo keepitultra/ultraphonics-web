@@ -430,6 +430,25 @@ export async function deleteSetlist(id) {
   await deleteDoc(docRef);
 }
 
+/**
+ * Create a new setlist by copying the songs/segues of an existing one.
+ * Vocal assignments are reset — a template's assignments were computed for
+ * a different show's personnel and shouldn't carry over.
+ * @param {string} newId - Document ID for the new setlist
+ * @param {string} newName - Display name for the new setlist
+ * @param {string} sourceId - Document ID of the setlist to copy from
+ * @returns {Promise<string>} the new setlist's id
+ */
+export async function duplicateSetlist(newId, newName, sourceId) {
+  const source = await getSetlist(sourceId);
+  if (!source) throw new Error('Template setlist not found');
+  await saveSetlist(newId, newName, source.songs || [], {
+    vocalAssignments: {},
+    segues: source.segues || {},
+  });
+  return newId;
+}
+
 // ============= QUOTES =============
 
 /**

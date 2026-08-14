@@ -49,15 +49,20 @@ export default function AdminShell({ activeApp, children }) {
   const [appSheetOpen, setAppSheetOpen] = useState(false);
   const navigate = useNavigate();
   const dropdownRef = useRef(/** @type {HTMLDivElement|null} */(null));
+  const mobileSheetRef = useRef(/** @type {HTMLDivElement|null} */(null));
 
-  // Close dropdown when clicking outside — avoids z-index conflicts with a backdrop element
+  // Close dropdown when clicking outside — avoids z-index conflicts with a backdrop element.
+  // Must also exempt the mobile sheet (rendered outside dropdownRef's subtree): otherwise this
+  // mousedown handler fires and unmounts the sheet before the tapped button's own click event
+  // can fire, so the tap appears to "just close the menu" without ever navigating.
   useEffect(() => {
     if (!appSheetOpen) return;
     /** @param {MouseEvent} e */
     function handleOutsideClick(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(/** @type {Node} */(e.target))) {
-        setAppSheetOpen(false);
-      }
+      const target = /** @type {Node} */ (e.target);
+      if (dropdownRef.current?.contains(target)) return;
+      if (mobileSheetRef.current?.contains(target)) return;
+      setAppSheetOpen(false);
     }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
@@ -207,6 +212,7 @@ export default function AdminShell({ activeApp, children }) {
           />
           {/* Sheet */}
           <div
+            ref={mobileSheetRef}
             className="fixed bottom-0 left-0 right-0 z-50 md:hidden rounded-t-2xl overflow-hidden"
             style={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
           >

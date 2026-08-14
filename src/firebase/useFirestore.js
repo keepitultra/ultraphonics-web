@@ -11,6 +11,7 @@ import {
   subscribeToClients,
   getSetlists,
   subscribeToSetlists,
+  getSetlist,
   subscribeToMembers,
 } from '../firestore-service.js';
 
@@ -59,6 +60,23 @@ export function useShow(showId) {
       .then((show) => { setData(show); setLoading(false); })
       .catch((err) => { setError(err); setLoading(false); });
   }, [showId]);
+
+  return { data, loading, error };
+}
+
+/** Fetch a single setlist by ID (public setlist share page — never subscribes to the full collection) */
+export function useSetlist(setlistId) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!setlistId) { setLoading(false); return; }
+    setLoading(true);
+    getSetlist(setlistId)
+      .then((setlist) => { setData(setlist); setLoading(false); })
+      .catch((err) => { setError(err); setLoading(false); });
+  }, [setlistId]);
 
   return { data, loading, error };
 }
