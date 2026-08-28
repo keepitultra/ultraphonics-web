@@ -185,11 +185,6 @@ export default function MemberProfile() {
           </div>
         )}
 
-        <div className="mt-8 text-center">
-          <Link to="/" className="text-xs hover:underline" style={{ color: theme.muted }}>
-            ultraphonics.com
-          </Link>
-        </div>
       </div>
     </div>
   );
