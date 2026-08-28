@@ -1,11 +1,29 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../firebase/AuthContext.jsx';
+import { useSettings } from '../../firebase/useFirestore.js';
+import { updateSettings } from '../../firestore-service.js';
 
 export default function SettingsModal({ onClose }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [ablesetIp, setAblesetIp] = useState(
     localStorage.getItem('ableset_url') || 'http://192.168.69.138'
   );
+  const { songRequestsEnabled, loaded: settingsLoaded } = useSettings();
+  const [savingRequests, setSavingRequests] = useState(false);
+
+  async function toggleSongRequests() {
+    if (savingRequests) return;
+    setSavingRequests(true);
+    try {
+      await updateSettings({ songRequestsEnabled: !songRequestsEnabled });
+    } catch (err) {
+      alert('Could not save that setting: ' + err.message);
+    } finally {
+      setSavingRequests(false);
+    }
+  }
 
   function saveAblesetIp(val) {
     const trimmed = val.trim();
@@ -56,6 +74,52 @@ export default function SettingsModal({ onClose }) {
             <p className="text-[#555] text-xs mt-1.5">
               Used for AbleSet tile and Live Charts URL. Saved immediately.
             </p>
+          </div>
+
+          <div className="pt-4 border-t border-[#2a2a2a]">
+            <label className="block text-xs font-semibold text-[#888] uppercase tracking-wider mb-2">
+              Band
+            </label>
+            <button
+              onClick={() => { onClose(); navigate('/members'); }}
+              className="w-full flex items-center gap-3 p-3 bg-[#121212] border border-[#2a2a2a] rounded-lg text-left transition-colors hover:bg-[#181818]"
+            >
+              <i className="fas fa-users text-[#00ddde] w-5 text-center" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-white">Member Management</div>
+                <div className="text-[11px] text-[#888] mt-0.5">
+                  Names, colours, roles and Google account links.
+                </div>
+              </div>
+              <i className="fas fa-chevron-right text-[10px] text-[#555]" />
+            </button>
+          </div>
+
+          <div className="pt-4 border-t border-[#2a2a2a]">
+            <label className="block text-xs font-semibold text-[#888] uppercase tracking-wider mb-2">
+              Public Site
+            </label>
+            <button
+              onClick={toggleSongRequests}
+              disabled={!settingsLoaded || savingRequests}
+              className="w-full flex items-center gap-3 p-3 bg-[#121212] border border-[#2a2a2a] rounded-lg text-left transition-colors hover:bg-[#181818] disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <div
+                className={`w-11 h-6 shrink-0 rounded-full transition-colors flex items-center ${songRequestsEnabled ? 'bg-[#f59e0b]' : 'bg-[#2a2a2a]'}`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full transition-transform mx-1 ${songRequestsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-white">
+                  Song requests {savingRequests ? '…' : songRequestsEnabled ? 'on' : 'off'}
+                </div>
+                <div className="text-[11px] text-[#888] mt-0.5">
+                  {songRequestsEnabled
+                    ? 'The "Request a Song" button shows on the homepage.'
+                    : 'Button hidden, and /request tells visitors we\u2019re not taking requests.'}
+                </div>
+              </div>
+            </button>
           </div>
 
           <div className="pt-1 space-y-2 border-t border-[#2a2a2a]">

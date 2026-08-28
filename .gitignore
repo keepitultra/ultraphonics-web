@@ -42,3 +42,8 @@ dist-electron/
 *.AppImage
 *.debservice-account.json
 scripts/service-account.json
+
+# Migration backups (production data snapshots, keep local)
+member-migration-backup-*/
+member-migration-cleanup-backup/
+firestore-debug.log

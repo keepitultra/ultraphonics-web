@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { buildMemberIndex } from '../utils/members.js';
 import {
   getPublishedShows,
   subscribeToPublishedShows,
@@ -13,6 +14,8 @@ import {
   subscribeToSetlists,
   getSetlist,
   subscribeToMembers,
+  subscribeToSettings,
+  subscribeToBandMembers,
 } from '../firestore-service.js';
 
 // ── Generic real-time subscription hook ─────────────────────
@@ -116,4 +119,69 @@ export function useMemberProfiles() {
     if (key) map[key] = { photoURL: m.photoURL || '', displayName: m.displayName || key, uid: m.uid };
   }
   return map;
+}
+
+/**
+ * Real-time site settings, with the flags the public pages care about resolved.
+ *
+ * Fails OPEN: while loading, if the settings doc has never been written, or if
+ * the read errors, `songRequestsEnabled` is true. Requests being switched off
+ * is the rare, deliberate state — a transient failure must never be what takes
+ * the public "Request a Song" flow down.
+ *
+ * `loaded` distinguishes "known enabled" from "not answered yet", so a page can
+ * hold off rendering a closed-state message it might immediately retract.
+ */
+export function useSettings() {
+  const [settings, setSettings] = useState(/** @type {Object|null} */ (null));
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToSettings(
+      data => { setSettings(data); setLoaded(true); },
+      () => { setSettings({}); setLoaded(true); },
+    );
+    return unsubscribe;
+  }, []);
+
+  return {
+    settings: settings || {},
+    loaded,
+    songRequestsEnabled: settings?.songRequestsEnabled !== false,
+  };
+}
+
+/**
+ * The band roster.
+ *
+ * Public-safe: reads only the `members` collection, which is world-readable.
+ * Deliberately does NOT touch `allowedUsers` — anonymous visitors can never
+ * read that, and the shared setlist link renders for anonymous visitors.
+ *
+ * Returns the index from buildMemberIndex(), so callers can resolve a member by
+ * id, display name, or legacy "Name (Instrument)" string — see
+ * src/utils/members.js for why all three must keep working.
+ */
+export function useMembers() {
+  const { data: members = [], loading } = useSubscription(subscribeToBandMembers);
+  return useMemo(
+    () => ({ ...buildMemberIndex(members), loading }),
+    [members, loading],
+  );
+}
+
+/**
+ * The band roster joined to Google account profiles (photo, email, link state).
+ *
+ * Admin-only — reading the whole `allowedUsers` collection requires an
+ * allowlisted account. Use useMembers() anywhere a signed-out visitor can land.
+ */
+export function useMembersWithAccounts() {
+  const { data: members = [], loading } = useSubscription(subscribeToBandMembers);
+  const { data: authUsers = [] } = useSubscription(subscribeToMembers);
+
+  return useMemo(() => {
+    const authByUid = new Map(authUsers.map(u => [u.uid, u]));
+    return { ...buildMemberIndex(members, authByUid), loading, authUsers };
+  }, [members, authUsers, loading]);
 }

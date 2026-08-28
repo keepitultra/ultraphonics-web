@@ -1,3 +1,5 @@
+export const GENRE_ORDER = ['Pop', 'Soul', 'Rock', 'Country', 'Other'];
+
 export const GENRE_COLORS = {
   Pop:     { bg: '#ec489920', text: '#f9a8d4', border: '#ec489940' },
   Soul:    { bg: '#a855f720', text: '#d8b4fe', border: '#a855f740' },

@@ -9,11 +9,16 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/allowedUsers/$(request.auth.uid));
     }
 
-    // Each user can read their own allowedUsers doc (required for the sign-in check).
-    // Writes are console/Admin SDK only.
+    // Membership is granted by a document EXISTING here, so `create` must stay
+    // denied — otherwise any Google account could authorise itself by writing
+    // its own doc. Signed-in users may only update the doc they already have,
+    // which is what lets AuthContext.syncMemberProfile() store their name,
+    // photo and email on sign-in. Allowlisted users can read the whole
+    // collection so the admin can show real names and photos.
     match /allowedUsers/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
+      allow read: if request.auth != null && (request.auth.uid == uid || isAllowedUser());
+      allow update: if request.auth != null && request.auth.uid == uid;
+      allow create, delete: if false;
     }
 
     // Shows: public read, allowlisted write
@@ -46,6 +51,21 @@ service cloud.firestore {
     // Quotes: allowlisted read/write only
     match /quotes/{quoteId} {
       allow read, write: if isAllowedUser();
+    }
+
+    // Band members: public read (the shared setlist view needs names/colours),
+    // allowlisted write. Contains no email or other PII by design — contact
+    // details stay in allowedUsers, which is not publicly readable.
+    match /members/{memberId} {
+      allow read: if true;
+      allow write: if isAllowedUser();
+    }
+
+    // Site settings: public read (the homepage and /request page gate on these),
+    // allowlisted write. Single doc: settings/global
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAllowedUser();
     }
 
     // Song requests: public create (anyone at a show can submit), admin read/update/delete

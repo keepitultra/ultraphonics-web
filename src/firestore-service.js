@@ -26,8 +26,14 @@ const COLLECTIONS = {
   CLIENTS: 'clients',
   SETLISTS: 'setlists',
   QUOTES: 'quotes',
-  SONG_REQUESTS: 'songRequests'
+  SONG_REQUESTS: 'songRequests',
+  SETTINGS: 'settings',
+  MEMBERS: 'members'
 };
+
+// Site-wide settings live in a single document so the public pages need exactly
+// one read to know what's switched on.
+const SETTINGS_DOC = 'global';
 
 // ============= SHOWS =============
 
@@ -157,18 +163,31 @@ export function subscribeToSongs(callback) {
 }
 
 /**
- * Save a song
- * @param {Object} song
+ * Save a song.
+ *
+ * Merges rather than replaces. The edit form only carries the fields it puts on
+ * screen, so a whole-document overwrite silently discarded everything else —
+ * most damagingly the AbleSet sync keys (ablesetId/ablesetName/ablesetTime/
+ * ablesetSkipped) that compareSongLists() matches on, and the `active` archive
+ * flag, which would resurrect an archived song on any edit.
+ *
+ * Because merge leaves absent keys untouched, removing a field needs to be
+ * explicit: pass `null` for any field the caller wants deleted.
+ *
+ * @param {Object} song - Fields to write. `null` deletes that field.
  * @returns {Promise<void>}
  */
 export async function saveSong(song) {
   const songId = song.id || song.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const docRef = doc(db, COLLECTIONS.SONGS, songId);
-  await setDoc(docRef, {
-    ...song,
-    id: songId,
-    updatedAt: new Date().toISOString()
-  });
+  const payload = {};
+  for (const [key, value] of Object.entries(song)) {
+    if (value === undefined) continue;
+    payload[key] = value === null ? deleteField() : value;
+  }
+  payload.id = songId;
+  payload.updatedAt = new Date().toISOString();
+  await setDoc(docRef, payload, { merge: true });
 }
 
 /**
@@ -413,7 +432,9 @@ export async function saveSetlist(id, name, songs, options = {}) {
   await setDoc(docRef, {
     name,
     songs,
-    songCount: songs.filter(s => !s.lastKnownName?.startsWith('Set ')).length,
+    // Must use the same marker rule as the UI (src/utils/setlistUtils.js), or
+    // "set 1" / "Set1" gets counted as a song here but not on screen.
+    songCount: songs.filter(s => !/^Set\s*\d/i.test(s.title || s.lastKnownName || '')).length,
     vocalAssignments: options.vocalAssignments || {},
     segues: options.segues || {},
     updatedAt: new Date().toISOString()
@@ -421,13 +442,35 @@ export async function saveSetlist(id, name, songs, options = {}) {
 }
 
 /**
- * Delete a setlist by document ID
+ * Delete a setlist, and clear the link from any show that pointed at it.
+ *
+ * Without this a deleted setlist leaves shows holding a reference to a document
+ * that no longer exists: the show's Setlist card silently disappears, and if a
+ * new setlist is later saved under the same slug the stale show re-adopts it.
+ *
+ * The unlink and the delete share one batch, so a show can never be left
+ * pointing at a setlist that has already gone.
+ *
+ * Uses '' rather than a missing field to match how the Show editor clears the
+ * link (setField('setlistId', '')), so both paths produce identical documents.
+ *
  * @param {string} id - Document ID
- * @returns {Promise<void>}
+ * @returns {Promise<number>} how many shows were unlinked
  */
 export async function deleteSetlist(id) {
-  const docRef = doc(db, COLLECTIONS.SETLISTS, id);
-  await deleteDoc(docRef);
+  const linked = await getDocs(
+    query(collection(db, COLLECTIONS.SHOWS), where('setlistId', '==', id)),
+  );
+
+  const batch = writeBatch(db);
+  const now = new Date().toISOString();
+  for (const showDoc of linked.docs) {
+    batch.update(showDoc.ref, { setlistId: '', updatedAt: now });
+  }
+  batch.delete(doc(db, COLLECTIONS.SETLISTS, id));
+  await batch.commit();
+
+  return linked.size;
 }
 
 /**
@@ -447,6 +490,86 @@ export async function duplicateSetlist(newId, newName, sourceId) {
     segues: source.segues || {},
   });
   return newId;
+}
+
+// ============= BAND MEMBERS =============
+// Note: `members` is the band roster (names, colours, roles). It is distinct
+// from `allowedUsers`, which is the auth allowlist read by subscribeToMembers()
+// below — a member may have no login, and a login may not be a band member.
+
+/**
+ * Subscribe to the band roster.
+ * @param {Function} callback
+ * @param {Function} [onError]
+ * @returns {Function} Unsubscribe function
+ */
+export function subscribeToBandMembers(callback, onError) {
+  return onSnapshot(
+    collection(db, COLLECTIONS.MEMBERS),
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Create or update a band member. Merges, so callers only send what changed.
+ * @param {string} memberId - stable slug
+ * @param {Object} data
+ */
+export async function saveBandMember(memberId, data) {
+  const docRef = doc(db, COLLECTIONS.MEMBERS, memberId);
+  await setDoc(docRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+}
+
+/**
+ * Delete a band member. Callers should prefer setting active:false — existing
+ * shows and setlists still reference this id and will render it as unknown.
+ * @param {string} memberId
+ */
+export async function deleteBandMember(memberId) {
+  await deleteDoc(doc(db, COLLECTIONS.MEMBERS, memberId));
+}
+
+// ============= SETTINGS =============
+
+/**
+ * Subscribe to site-wide settings.
+ *
+ * Callers should treat a missing document as "everything enabled" — the doc is
+ * created lazily on first toggle, so its absence must not switch public
+ * features off.
+ *
+ * @param {Function} callback - receives the settings object (or {} if unset)
+ * @param {Function} [onError]
+ * @returns {Function} Unsubscribe function
+ */
+export function subscribeToSettings(callback, onError) {
+  const docRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+  return onSnapshot(
+    docRef,
+    snapshot => callback(snapshot.exists() ? snapshot.data() : {}),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Read site-wide settings once.
+ * @returns {Promise<Object>} the settings object, or {} if never written
+ */
+export async function getSettings() {
+  const docRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+  const snapshot = await getDoc(docRef);
+  return snapshot.exists() ? snapshot.data() : {};
+}
+
+/**
+ * Merge a partial update into site-wide settings, creating the doc if needed.
+ * @param {Object} patch
+ * @returns {Promise<void>}
+ */
+export async function updateSettings(patch) {
+  const docRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+  await setDoc(docRef, { ...patch, updatedAt: new Date().toISOString() }, { merge: true });
 }
 
 // ============= QUOTES =============

@@ -3,6 +3,9 @@ import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { subscribeToSongRequests, dismissSongRequest } from '../firestore-service.js';
 
+// Matches the 'requests' entry in AdminShell's APPS table
+const REQUESTS_ACCENT = '#f59e0b';
+
 // Keep screen awake while this page is open
 function useWakeLock() {
   useEffect(() => {
@@ -78,21 +81,21 @@ function RequestsContent() {
           <button
             onClick={() => setShowAll(false)}
             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-            style={!showAll ? { background: 'rgba(20,184,166,0.15)', color: '#14b8a6' } : { color: '#888' }}
+            style={!showAll ? { background: `${REQUESTS_ACCENT}26`, color: REQUESTS_ACCENT } : { color: '#888' }}
           >
             Pending ({pending.length})
           </button>
           <button
             onClick={() => setShowAll(true)}
             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-            style={showAll ? { background: 'rgba(20,184,166,0.15)', color: '#14b8a6' } : { color: '#888' }}
+            style={showAll ? { background: `${REQUESTS_ACCENT}26`, color: REQUESTS_ACCENT } : { color: '#888' }}
           >
             All ({requests.length})
           </button>
           <div className="ml-auto flex items-center gap-2 text-[#555] text-xs">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
             </span>
             Live
           </div>
@@ -123,7 +126,7 @@ function RequestsContent() {
                       onClick={() => dismissSongRequest(req.id)}
                       className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
                       style={{ background: '#1e1e1e', color: '#888', border: '1px solid #2a2a2a' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(20,184,166,0.12)'; e.currentTarget.style.color = '#14b8a6'; e.currentTarget.style.borderColor = '#14b8a640'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = `${REQUESTS_ACCENT}1f`; e.currentTarget.style.color = REQUESTS_ACCENT; e.currentTarget.style.borderColor = `${REQUESTS_ACCENT}40`; }}
                       onMouseLeave={e => { e.currentTarget.style.background = '#1e1e1e'; e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
                     >
                       Done

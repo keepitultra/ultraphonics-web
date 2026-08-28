@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { saveSongRequest, getWebsiteSongs } from '../firestore-service.js';
 import { trackEvent } from '../analytics.js';
 import { GENRE_COLORS, genreLabel } from '../utils/genre.js';
+import { useSettings } from '../firebase/useFirestore.js';
 
 const { tipping } = config;
 
@@ -21,6 +22,7 @@ export default function SongRequest() {
   const [submittedTitle, setSubmittedTitle] = useState('');
   const searchRef = useRef(null);
   const navigate = useNavigate();
+  const { songRequestsEnabled, loaded: settingsLoaded } = useSettings();
 
   useEffect(() => {
     getWebsiteSongs()
@@ -70,6 +72,30 @@ export default function SongRequest() {
   const venmoHref = /iPhone|iPad|iPod/.test(navigator.userAgent)
     ? `venmo://paycharge?txn=pay&recipients=${tipping.venmo}&amount=${tipping.tipAmount}&note=${encodeURIComponent(tipping.note)}`
     : `https://account.venmo.com/u/${tipping.venmo}?txn=pay&amount=${tipping.tipAmount}&note=${encodeURIComponent(tipping.note)}`;
+
+  // Requests switched off in admin. Gated on `settingsLoaded` so the page never
+  // flashes this message before the real answer arrives. Someone mid-flow who
+  // already submitted still sees their confirmation below.
+  if (settingsLoaded && !songRequestsEnabled && !submitted) {
+    return (
+      <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="w-20 h-20 rounded-full bg-stone-800 flex items-center justify-center mb-6">
+          <i className="fas fa-music text-stone-500 text-3xl" />
+        </div>
+        <h1 className="text-3xl font-bold text-white mb-2">Requests are closed</h1>
+        <p className="text-stone-400 text-base max-w-sm">
+          Sorry — we&rsquo;re not taking song requests right now. Come find us at the
+          next show!
+        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="mt-8 px-6 py-3 rounded-2xl font-bold text-base text-white bg-stone-800 hover:bg-stone-700 transition-colors"
+        >
+          Back to the site
+        </button>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (

@@ -1,11 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useMembers } from '../../firebase/useFirestore.js';
 import { Link } from 'react-router-dom';
 import MemberAvatar from '../MemberAvatar.jsx';
 
-const PERSONNEL_COLORS = {
-  Anthony: '#f59e0b', Tom: '#22c55e', Lester: '#a78bfa',
-  David: '#e879f9', Shelley: '#fb923c', Kelsey: '#38bdf8',
-};
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -35,6 +32,7 @@ function localDateStr(d) {
 }
 
 export default function HeadsUpSection({ shows, clients, memberProfiles = {}, onTotalCount }) {
+  const members = useMembers();
   const [lookaheadWeeks, setLookaheadWeeks] = useState(() => {
     const v = parseInt(localStorage.getItem('hu_lookahead_weeks') || '4');
     return isNaN(v) ? 4 : v;
@@ -197,7 +195,7 @@ export default function HeadsUpSection({ shows, clients, memberProfiles = {}, on
                 {show.personnel?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {show.personnel.map(name => {
-                      const color = PERSONNEL_COLORS[name] || '#888';
+                      const color = members.colorOf(name);
                       return (
                         <span
                           key={name}
@@ -208,8 +206,8 @@ export default function HeadsUpSection({ shows, clients, memberProfiles = {}, on
                             border: `1px solid ${color}30`,
                           }}
                         >
-                          <MemberAvatar name={name} profiles={memberProfiles} size={14} color={color} />
-                          {name}
+                          <MemberAvatar name={members.nameOf(name)} profiles={memberProfiles} size={14} color={color} />
+                          {members.nameOf(name)}
                         </span>
                       );
                     })}

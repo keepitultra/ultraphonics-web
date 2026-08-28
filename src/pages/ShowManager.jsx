@@ -3,11 +3,11 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
-import { useShows, useSetlists, useClients, useMemberProfiles } from '../firebase/useFirestore.js';
+import { useShows, useSetlists, useClients, useMemberProfiles, useMembers } from '../firebase/useFirestore.js';
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import { saveShow, deleteShow, saveSetlist, duplicateSetlist } from '../firestore-service.js';
 import { slugify, makeUniqueSlug } from '../utils.js';
-import { PERSONNEL, PERSONNEL_COLORS } from '../constants/band.js';
+
 
 const ACCENT    = '#a78bfa';
 const ACCENT_BG = '#7c3aed';
@@ -153,6 +153,7 @@ function ShowManager() {
   const { data: setlists = [] } = useSetlists();
   const { data: clients = [] } = useClients();
   const memberProfiles = useMemberProfiles();
+  const members = useMembers();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const rawShowId = searchParams.get('show') || null;
@@ -245,7 +246,9 @@ function ShowManager() {
     .filter(s => {
       const yr = extractYear(s.date) || '';
       if (showYear && yr !== showYear) return false;
-      if (personnelFilter.length > 0 && !(s.personnel || []).some(p => personnelFilter.includes(p))) return false;
+      // Filter holds member ids; stored personnel may still be legacy names.
+      if (personnelFilter.length > 0
+        && !(s.personnel || []).some(p => personnelFilter.includes(members.idOf(p)))) return false;
       const text = `${s.venue || ''} ${s.city || ''} ${s.state || ''}`.toLowerCase();
       return text.includes(showSearch.toLowerCase());
     })
@@ -413,23 +416,24 @@ function ShowManager() {
           </select>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {PERSONNEL.map(p => {
+          {members.bandMembers.map(m => {
+            const p = m.id;
             const selected = personnelFilter.includes(p);
-            const color = PERSONNEL_COLORS[p];
+            const color = m.color;
             return (
               <button
                 key={p}
                 type="button"
                 onClick={() => togglePersonnelFilter(p)}
-                title={`Filter to shows with ${p}`}
+                title={`Filter to shows with ${m.name}`}
                 className="flex items-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-semibold transition-all"
                 style={selected
                   ? { background: `${color}25`, color, border: `1px solid ${color}60` }
                   : { color: '#888', border: '1px solid #2a2a2a' }
                 }
               >
-                <MemberAvatar name={p} profiles={memberProfiles} color={color} size={14} />
-                {p}
+                <MemberAvatar name={m.name} profiles={memberProfiles} color={color} size={14} />
+                {m.name}
               </button>
             );
           })}
@@ -475,7 +479,7 @@ function ShowManager() {
                       {s.personnel?.length > 0 && (
                         <div className="flex items-center gap-1 mt-1">
                           {s.personnel.slice(0, 5).map(p => (
-                            <MemberAvatar key={p} name={p} profiles={memberProfiles} color={PERSONNEL_COLORS[p] || '#888'} size={18} />
+                            <MemberAvatar key={p} name={members.nameOf(p)} profiles={memberProfiles} color={members.colorOf(p)} size={18} />
                           ))}
                         </div>
                       )}
@@ -551,7 +555,7 @@ function ShowManager() {
               </h2>
               {selectedShow.personnel?.length > 0 && (
                 <div className="flex items-center justify-start gap-1 mt-1.5 flex-wrap">
-                  {selectedShow.personnel.map(p => <MemberAvatar key={p} name={p} profiles={memberProfiles} color={PERSONNEL_COLORS[p] || '#888'} size={24} />)}
+                  {selectedShow.personnel.map(p => <MemberAvatar key={p} name={members.nameOf(p)} profiles={memberProfiles} color={members.colorOf(p)} size={24} />)}
                 </div>
               )}
             </div>
@@ -669,6 +673,7 @@ function EmptyState({ icon, message }) {
 
 // ── Show Detail ────────────────────────────────────────────────────────────
 function ShowDetail({ show, clients, setlists, memberProfiles = {}, onPublish }) {
+  const members = useMembers();
   const client = clients.find(c => c.id === show.clientId);
   const setlist = setlists.find(s => s.id === show.setlistId);
 
@@ -721,7 +726,7 @@ function ShowDetail({ show, clients, setlists, memberProfiles = {}, onPublish })
           <div className="flex flex-wrap justify-center gap-2">
             {show.personnel?.map(p => (
               <div key={p} className="flex items-center gap-1.5">
-                <MemberAvatar name={p} profiles={memberProfiles} color={PERSONNEL_COLORS[p] || '#888'} size={28} />
+                <MemberAvatar name={members.nameOf(p)} profiles={memberProfiles} color={members.colorOf(p)} size={28} />
                 <span className="text-sm text-[#ccc]">{p}</span>
               </div>
             ))}
@@ -785,6 +790,7 @@ function fromTimeInputValue(val) {
 
 // ── Show Edit Form ─────────────────────────────────────────────────────────
 function ShowEditForm({ form, setField, setFields, clients, setlists, onClientChange, memberProfiles = {} }) {
+  const members = useMembers();
   const [guestName, setGuestName] = useState('');
   const [guestInstrument, setGuestInstrument] = useState('Guitar');
   const [addingGuest, setAddingGuest] = useState(false);
@@ -797,7 +803,7 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
     if (!name) return;
     const tag = `${name} (${guestInstrument})`;
     const current = form.personnel || [];
-    if (!current.includes(tag)) setField('personnel', [...current, tag]);
+    if (!current.some(x => x === tag)) setField('personnel', [...current, tag]);
     setGuestName('');
     setGuestInstrument('Guitar');
     setAddingGuest(false);
@@ -934,16 +940,19 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
       </FormField>
       <FormField label="Personnel">
         <div className="flex flex-wrap gap-2">
-          {PERSONNEL.map(p => {
-            const selected = (form.personnel || []).includes(p);
-            const color = PERSONNEL_COLORS[p];
+          {members.bandMembers.map(m => {
+            const p = m.id;
+            const selected = (form.personnel || []).some(x => members.idOf(x) === p);
+            const color = m.color;
             return (
               <button
                 key={p}
                 type="button"
                 onClick={() => {
                   const current = form.personnel || [];
-                  setField('personnel', selected ? current.filter(x => x !== p) : [...current, p]);
+                  setField('personnel', selected
+                    ? current.filter(x => members.idOf(x) !== p)
+                    : [...current, p]);
                 }}
                 className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all"
                 style={selected
@@ -951,13 +960,13 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
                   : { color: '#888', border: '1px solid #2a2a2a' }
                 }
               >
-                <MemberAvatar name={p} profiles={memberProfiles} color={color} size={20} />
-                {p}
+                <MemberAvatar name={m.name} profiles={memberProfiles} color={color} size={20} />
+                {m.name}
               </button>
             );
           })}
           {/* Guest musicians already added */}
-          {(form.personnel || []).filter(p => !PERSONNEL.includes(p)).map(g => (
+          {(form.personnel || []).filter(p => members.get(p).type === 'guest').map(g => (
             <button
               key={g}
               type="button"
@@ -966,7 +975,7 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
               style={{ background: '#78716c25', color: '#a8a29e', border: '1px solid #78716c60' }}
             >
               <i className="fas fa-user-music text-[10px]" />
-              {g}
+              {members.nameOf(g)}
               <i className="fas fa-times text-[9px] ml-0.5 opacity-60" />
             </button>
           ))}
@@ -1009,7 +1018,7 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
       <FormField label="Event Handler">
         <select value={form.eventHandler || ''} onChange={e => setField('eventHandler', e.target.value)} className={SELECT}>
           <option value="">— None —</option>
-          {PERSONNEL.map(p => <option key={p}>{p}</option>)}
+          {members.bandMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
       </FormField>
     </div>

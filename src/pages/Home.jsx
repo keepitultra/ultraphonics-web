@@ -5,6 +5,7 @@ import { trackEvent } from '../analytics.js';
 import { config } from '../config.js';
 import Modal from '../components/Modal.jsx';
 import ShowCard from '../components/ShowCard.jsx';
+import { useSettings } from '../firebase/useFirestore.js';
 import {
   parseLocalDateOnly,
   parseTimeToHM,
@@ -21,6 +22,7 @@ export default function Home() {
   const { data: shows, loading } = usePublishedShows();
   const [tipOpen, setTipOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
+  const { songRequestsEnabled } = useSettings();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const logoClicksRef = useRef([]);
@@ -271,14 +273,16 @@ export default function Home() {
             >
               Tip the Band
             </button>
-            <Link
-              to="/request"
-              className="button"
-              id="request-button"
-              onClick={() => trackEvent('song_request_cta_click', { source: 'hero' })}
-            >
-              Request a Song
-            </Link>
+            {songRequestsEnabled && (
+              <Link
+                to="/request"
+                className="button"
+                id="request-button"
+                onClick={() => trackEvent('song_request_cta_click', { source: 'hero' })}
+              >
+                Request a Song
+              </Link>
+            )}
           </div>
           <div className="social-icons">
             <a

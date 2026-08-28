@@ -6,7 +6,8 @@ import { useAuth } from '../firebase/AuthContext.jsx';
 import { useSongs } from '../firebase/useFirestore.js';
 import { getSongs, saveSong, deleteSong, syncSongsBatch } from '../firestore-service.js';
 import { parseSongData } from '../utils/lyricParser.ts';
-import { LEAD_VOCALISTS } from '../constants/band.js';
+import { useMembers } from '../firebase/useFirestore.js';
+import { formatDuration, parseDurationInput } from '../utils/setlistUtils.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const GENRE_ORDER = ['Pop', 'Soul', 'Rock', 'Country', 'Other'];
@@ -73,9 +74,24 @@ function compareSongLists(importList, dbSongs) {
   return { toCreate, toUpdate, toArchive };
 }
 
+// NOTE: AbleSet's `time` is a timeline position, not a song length — it is kept
+// as `ablesetTime` for sync diffing but must never be written to `duration`,
+// which drives set-length estimates. Durations are seeded by
+// scripts/backfill-song-durations.mjs and edited by hand on this page.
 function buildSongDocument(imported) {
   const parsed = parseSongName(imported.lastKnownName);
-  return { ablesetId: imported.id, ablesetName: imported.lastKnownName, ablesetTime: imported.time || 0, ablesetSkipped: imported.skipped || false, title: parsed.title, artist: parsed.artist, key: parsed.key, duration: imported.time || 0, active: true, capo: parsed.meta.capo, eflat: parsed.meta.isEflat, dropD: parsed.meta.isDrop };
+  return { ablesetId: imported.id, ablesetName: imported.lastKnownName, ablesetTime: imported.time || 0, ablesetSkipped: imported.skipped || false, title: parsed.title, artist: parsed.artist, key: parsed.key, active: true, capo: parsed.meta.capo, eflat: parsed.meta.isEflat, dropD: parsed.meta.isDrop };
+}
+
+/**
+ * Re-key a vocalCapability map to member ids. Pre-migration these keys are
+ * display names; idOf() is idempotent so post-migration data passes through
+ * unchanged and editing a song never mixes the two forms.
+ */
+function normaliseCapability(cap, members) {
+  const out = {};
+  for (const [key, value] of Object.entries(cap || {})) out[members.idOf(key)] = value;
+  return out;
 }
 
 function genreFor(song) {
@@ -159,7 +175,7 @@ function parseVocalTable(text) {
     return {
       title: (title || '').trim(),
       capability: { Tom: truthy(tom), Shelley: truthy(shelley), Kelsey: truthy(kelsey), David: truthy(david) },
-      preferred: LEAD_VOCALISTS.find(v => v.toLowerCase() === (preferred || '').trim().toLowerCase()) || '',
+      preferred: (preferred || '').trim(),
     };
   }).filter(r => r.title);
 }
@@ -311,6 +327,7 @@ export default function SongManager() {
 function SongManagerInner() {
   const { user } = useAuth();
   const { data: songs = [] } = useSongs();
+  const members = useMembers();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -396,14 +413,15 @@ function SongManagerInner() {
       genre: selected.genre || '',
       key: selected.key || '',
       capo: selected.capo ?? 0,
+      duration: selected.duration ? formatDuration(selected.duration) : '',
       eflat: selected.eflat || false,
       dropD: selected.dropD || false,
       chartUrl: selected.chartUrl || '',
       lyrics: selected.lyrics || '',
       notes: typeof selected.notes === 'string' ? selected.notes : (selected.notes || []).join('\n'),
       showOnWebsite: selected.showOnWebsite || false,
-      vocalCapability: selected.vocalCapability || {},
-      preferredVocalist: selected.preferredVocalist || '',
+      vocalCapability: normaliseCapability(selected.vocalCapability, members),
+      preferredVocalist: selected.preferredVocalist ? members.idOf(selected.preferredVocalist) : '',
     });
     setMode('edit');
   }
@@ -418,12 +436,22 @@ function SongManagerInner() {
     if (!editForm.title?.trim()) { alert('Title is required.'); return; }
     setSaving(true);
     try {
-      const data = { ...editForm, id: selectedId, capo: parseInt(editForm.capo) || 0, updatedAt: new Date().toISOString() };
-      if (!data.artist) delete data.artist;
-      if (!data.genre) delete data.genre;
-      if (!data.chartUrl) delete data.chartUrl;
-      if (!data.notes) delete data.notes;
-      if (!data.preferredVocalist) delete data.preferredVocalist;
+      const seconds = parseDurationInput(editForm.duration);
+      if (editForm.duration?.trim() && seconds === null) {
+        alert('Duration must look like 3:45 (minutes:seconds).');
+        setSaving(false);
+        return;
+      }
+      // saveSong merges, so fields the user cleared have to be sent as an
+      // explicit null to be removed — simply omitting them leaves the old value.
+      const data = { ...editForm, id: selectedId, capo: parseInt(editForm.capo) || 0 };
+      if (seconds === null) { data.duration = null; data.durationEstimated = null; }
+      else { data.duration = seconds; data.durationEstimated = false; }
+      if (!data.artist) data.artist = null;
+      if (!data.genre) data.genre = null;
+      if (!data.chartUrl) data.chartUrl = null;
+      if (!data.notes) data.notes = null;
+      if (!data.preferredVocalist) data.preferredVocalist = null;
       await saveSong(data);
       setIsDirty(false);
       setIsNewSong(false);
@@ -448,7 +476,7 @@ function SongManagerInner() {
     const id = uuid();
     setIsNewSong(true);
     setIsDirty(true);
-    setEditFormState({ title: '', artist: '', genre: '', key: '', capo: 0, eflat: false, dropD: false, chartUrl: '', lyrics: '', notes: '', showOnWebsite: false, vocalCapability: {}, preferredVocalist: '' });
+    setEditFormState({ title: '', artist: '', genre: '', key: '', capo: 0, duration: '', eflat: false, dropD: false, chartUrl: '', lyrics: '', notes: '', showOnWebsite: false, vocalCapability: {}, preferredVocalist: '' });
     setMode('edit');
     setSearchParams({ id }, { replace: false });
   }
@@ -808,6 +836,12 @@ function SongManagerInner() {
             {selected.capo > 0 && <MetaItem label="Capo" value={`Fret ${selected.capo}`} />}
             <MetaItem label="Tuning" value={selected.eflat ? 'Eb' : selected.dropD ? 'Drop D' : 'Standard'} />
             {selected.genre && <MetaItem label="Genre" value={selected.genre} />}
+            {selected.duration > 0 && (
+              <MetaItem
+                label="Length"
+                value={`${selected.durationEstimated ? '~' : ''}${formatDuration(selected.duration)}`}
+              />
+            )}
           </div>
 
           {/* Lyrics */}
@@ -844,7 +878,7 @@ function SongManagerInner() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto px-5 py-4">
-            <SongForm form={editForm} setField={setField} />
+            <SongForm form={editForm} setField={setField} leadVocalists={members.leadVocalists} />
           </div>
         </div>
       )}
@@ -1099,7 +1133,7 @@ function SongView({ song }) {
 }
 
 // ── SongForm ──────────────────────────────────────────────────────────────
-function SongForm({ form, setField }) {
+function SongForm({ form, setField, leadVocalists }) {
   return (
     <div className="space-y-4 max-w-2xl pb-8">
       <Field label="Title *">
@@ -1122,9 +1156,23 @@ function SongForm({ form, setField }) {
           </select>
         </Field>
       </div>
-      <Field label="Capo">
-        <input type="number" min="0" max="12" value={form.capo ?? 0} onChange={e => setField('capo', e.target.value)} className={INPUT} style={{ maxWidth: 120 }} />
-      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Capo">
+          <input type="number" min="0" max="12" value={form.capo ?? 0} onChange={e => setField('capo', e.target.value)} className={INPUT} style={{ maxWidth: 120 }} />
+        </Field>
+        <Field label="Length (m:ss)">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={form.duration || ''}
+            onChange={e => setField('duration', e.target.value)}
+            className={INPUT}
+            style={{ maxWidth: 120 }}
+            placeholder="3:45"
+          />
+          <p className="text-[11px] text-[#555] mt-1">Used to estimate set lengths.</p>
+        </Field>
+      </div>
       <div className="flex flex-wrap gap-5">
         <CheckField label="Eb Tuning (half-step down)" checked={!!form.eflat} onChange={v => setField('eflat', v)} />
         <CheckField label="Drop D Tuning" checked={!!form.dropD} onChange={v => setField('dropD', v)} />
@@ -1135,12 +1183,12 @@ function SongForm({ form, setField }) {
       </Field>
       <Field label="Can Sing Lead">
         <div className="flex flex-wrap gap-5">
-          {LEAD_VOCALISTS.map(v => (
+          {leadVocalists.map(m => (
             <CheckField
-              key={v}
-              label={v}
-              checked={!!form.vocalCapability?.[v]}
-              onChange={val => setField('vocalCapability', { ...form.vocalCapability, [v]: val })}
+              key={m.id}
+              label={m.name}
+              checked={!!form.vocalCapability?.[m.id]}
+              onChange={val => setField('vocalCapability', { ...form.vocalCapability, [m.id]: val })}
             />
           ))}
         </div>
@@ -1148,7 +1196,7 @@ function SongForm({ form, setField }) {
       <Field label="Preferred Vocalist">
         <select value={form.preferredVocalist || ''} onChange={e => setField('preferredVocalist', e.target.value)} className={INPUT} style={{ maxWidth: 220 }}>
           <option value="">— None —</option>
-          {LEAD_VOCALISTS.map(v => <option key={v} value={v}>{v}</option>)}
+          {leadVocalists.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
       </Field>
       <Field label="Lyrics">
