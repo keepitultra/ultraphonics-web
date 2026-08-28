@@ -531,6 +531,24 @@ export async function deleteBandMember(memberId) {
   await deleteDoc(doc(db, COLLECTIONS.MEMBERS, memberId));
 }
 
+// ============= ADMINS =============
+
+/**
+ * Whether this uid is a band admin (may manage every member, not just their
+ * own). Backed by the `admins` collection, which no client can write — see
+ * firestore.rules and scripts/seed-admins.mjs.
+ */
+export async function isUserAdmin(uid) {
+  if (!uid) return false;
+  try {
+    const snapshot = await getDoc(doc(db, 'admins', uid));
+    return snapshot.exists();
+  } catch {
+    // Treat an unreadable admins doc as "not an admin" — fail closed.
+    return false;
+  }
+}
+
 // ============= MEMBER PROFILES =============
 // Public-facing profile pages. Kept apart from `members` so an unpublished
 // draft is genuinely unreadable rather than merely hidden by the UI.

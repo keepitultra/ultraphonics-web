@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { buildMemberIndex } from '../utils/members.js';
+import { useAuth } from './AuthContext.jsx';
 import {
   getPublishedShows,
   subscribeToPublishedShows,
@@ -18,6 +19,7 @@ import {
   subscribeToBandMembers,
   subscribeToMemberProfiles,
   subscribeToPublishedProfiles,
+  isUserAdmin,
 } from '../firestore-service.js';
 
 // ── Generic real-time subscription hook ─────────────────────
@@ -205,4 +207,28 @@ export function usePublishedProfiles() {
       .sort((a, b) => (a.member.sortOrder ?? 999) - (b.member.sortOrder ?? 999));
     return { profiles: joined, loading: loading || members.loading };
   }, [profiles, members, loading]);
+}
+
+/**
+ * Whether the signed-in user may manage the whole band.
+ *
+ * Fails closed: until the check resolves, and on any error, `isAdmin` is false,
+ * so the UI never briefly offers admin controls to a member.
+ */
+export function useIsAdmin() {
+  const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.uid) { setIsAdmin(false); setLoading(false); return; }
+    setLoading(true);
+    isUserAdmin(user.uid)
+      .then(v => { if (!cancelled) { setIsAdmin(v); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setIsAdmin(false); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [user?.uid]);
+
+  return { isAdmin, loading };
 }

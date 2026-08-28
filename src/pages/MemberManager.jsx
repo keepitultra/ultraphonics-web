@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
+import { useAuth } from '../firebase/AuthContext.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import MemberAvatar from '../components/MemberAvatar.jsx';
-import { useMembersWithAccounts, useMemberProfileDocs } from '../firebase/useFirestore.js';
+import { useMembersWithAccounts, useMemberProfileDocs, useIsAdmin } from '../firebase/useFirestore.js';
 import { saveBandMember, deleteBandMember, saveMemberProfile } from '../firestore-service.js';
 import { MEMBER_ROLES, slugifyMember, GUEST_COLOR } from '../utils/members.js';
 import { THEMES, FONTS, PATTERNS, SOCIAL_PLATFORMS, safeUrl, DEFAULT_THEME, DEFAULT_FONT, DEFAULT_PATTERN } from '../utils/profileThemes.js';
@@ -20,6 +21,11 @@ function MembersContent() {
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { all, authUsers, loading } = useMembersWithAccounts();
   const { data: profileDocs = [] } = useMemberProfileDocs();
+  const { user } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
+
+  // The member record this signed-in user owns, if any.
+  const ownMember = all.find(m => m.googleUid && m.googleUid === user?.uid) || null;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get('m');
 
@@ -29,7 +35,18 @@ function MembersContent() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const selected = all.find(m => m.id === selectedId) || null;
+  const selected = isAdmin
+    ? (all.find(m => m.id === selectedId) || null)
+    : ownMember;
+
+  // A member landing here goes straight to their own details — there is no
+  // roster to browse, so keep the URL in step with what is actually shown.
+  useEffect(() => {
+    if (adminLoading || isAdmin || !ownMember) return;
+    if (searchParams.get('m') !== ownMember.id) {
+      setSearchParams({ m: ownMember.id }, { replace: true });
+    }
+  }, [adminLoading, isAdmin, ownMember, searchParams, setSearchParams]);
 
   // Load the selected member into the form whenever the selection changes.
   useEffect(() => {
@@ -210,7 +227,7 @@ function MembersContent() {
 
   // ── Right: editor ──────────────────────────────────────────────────────
   const rightPanel = (
-    <div className="relative flex flex-col overflow-hidden bg-[#121212] text-left">
+    <div className="relative flex-1 min-w-0 flex flex-col overflow-hidden bg-[#121212] text-left">
       <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2">
         <button
           onClick={() => navigate('/admin')}
@@ -220,9 +237,9 @@ function MembersContent() {
           <i className="fas fa-arrow-left text-sm" />
         </button>
         <h1 className="flex-1 min-w-0 text-base font-bold text-white truncate">
-          {isNew ? 'New Member' : selected ? selected.name : 'Member Management'}
+          {!isAdmin ? 'My Details' : isNew ? 'New Member' : selected ? selected.name : 'Member Management'}
         </h1>
-        {!isNew && selected && (
+        {isAdmin && !isNew && selected && (
           <button
             onClick={handleDelete}
             className="shrink-0 w-11 h-11 flex items-center justify-center text-[#555] hover:text-red-400 rounded-lg transition-colors"
@@ -282,7 +299,7 @@ function MembersContent() {
               </div>
             </Field>
 
-            <Field label="Roles">
+            {isAdmin ? <Field label="Roles">
               <div className="flex flex-wrap gap-2">
                 {MEMBER_ROLES.map(r => {
                   const on = form.roles.includes(r);
@@ -300,9 +317,21 @@ function MembersContent() {
                   );
                 })}
               </div>
-            </Field>
+            </Field> : (form.roles.length > 0 && (
+              <Field label="Roles">
+                <div className="flex flex-wrap gap-2">
+                  {form.roles.map(r => (
+                    <span key={r} className="min-h-[36px] px-3 flex items-center rounded-xl text-sm font-semibold"
+                      style={{ background: `${form.color}18`, color: form.color, border: `1px solid ${form.color}44` }}>
+                      {r}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[11px] text-[#555] mt-1.5">Set by the band admin.</p>
+              </Field>
+            ))}
 
-            <div className="space-y-3">
+            {isAdmin && <div className="space-y-3">
               <Toggle
                 checked={form.canSingLead}
                 onChange={v => set('canSingLead', v)}
@@ -324,9 +353,9 @@ function MembersContent() {
                 label="Active"
                 hint="Inactive members stay readable in past shows but are no longer offered."
               />
-            </div>
+            </div>}
 
-            <Field label="Sort order">
+            {isAdmin && <Field label="Sort order">
               <input
                 type="number"
                 className={INPUT}
@@ -334,7 +363,7 @@ function MembersContent() {
                 value={form.sortOrder}
                 onChange={e => set('sortOrder', e.target.value)}
               />
-            </Field>
+            </Field>}
 
             {/* ── Public profile page ─────────────────────────────────── */}
             <div className="pt-4 border-t border-[#2a2a2a] space-y-5">
@@ -490,7 +519,7 @@ function MembersContent() {
             </div>
 
             {/* Google account link — the basis for calendar invites later */}
-            <div className="pt-4 border-t border-[#2a2a2a]">
+            {isAdmin && <div className="pt-4 border-t border-[#2a2a2a]">
               <Field label="Google account">
                 <select
                   className={INPUT}
@@ -512,7 +541,7 @@ function MembersContent() {
                       : 'Used to match this member to their Google identity for calendar invites.'}
                 </p>
               </Field>
-            </div>
+            </div>}
           </div>
         )}
       </div>
@@ -540,12 +569,41 @@ function MembersContent() {
     </div>
   );
 
+  if (adminLoading) {
+    return <AdminShell activeApp="members"><div className="flex-1" /></AdminShell>;
+  }
+
+  // A member whose account has not been linked to a roster entry has nothing
+  // to edit. Say so plainly rather than showing an empty form.
+  if (!isAdmin && !ownMember) {
+    return (
+      <AdminShell activeApp="members">
+        <div className="flex-1 flex items-center justify-center text-center px-6">
+          <div className="max-w-sm">
+            <i className="fas fa-user-lock text-4xl text-[#333] mb-4 block" />
+            <h1 className="text-lg font-bold text-white mb-2">Your account isn&rsquo;t linked yet</h1>
+            <p className="text-sm text-[#888]">
+              {user?.email} isn&rsquo;t connected to a band member record, so there&rsquo;s
+              nothing here to edit. Ask Tom to link it on the Members page.
+            </p>
+          </div>
+        </div>
+      </AdminShell>
+    );
+  }
+
   return (
     <AdminShell activeApp="members">
-      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
-        {leftPanel}
-        {rightPanel}
-      </div>
+      {isAdmin ? (
+        <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+          {leftPanel}
+          {rightPanel}
+        </div>
+      ) : (
+        // Single pane: a member manages only themselves, so there is no roster
+        // to browse and the sidebar would be an empty column.
+        <div className="flex-1 min-h-0 flex overflow-hidden">{rightPanel}</div>
+      )}
     </AdminShell>
   );
 }

@@ -3,6 +3,34 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Band admins. Deliberately a separate collection that NOBODY can write
+    // through the client: allowedUsers is self-updatable (so sign-in can sync a
+    // profile), so a role flag stored there could be granted to oneself.
+    // Seeded with scripts/seed-admins.mjs via the Admin SDK.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // The member record this signed-in user owns, if any.
+    function ownsMember(memberId) {
+      return request.auth != null
+        && get(/databases/$(database)/documents/members/$(memberId)).data.googleUid == request.auth.uid;
+    }
+
+    // Fields only an admin may change: band-operational flags that affect how
+    // setlists are generated, plus googleUid, which decides whose record this
+    // is and must never be self-assignable.
+    function touchesAdminOnlyFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['googleUid', 'canSingLead', 'type', 'active', 'sortOrder', 'roles', 'fullName']);
+    }
+
+    match /admins/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // Central allowlist — used by all protected collections
     function isAllowedUser() {
       return request.auth != null
@@ -58,7 +86,11 @@ service cloud.firestore {
     // details stay in allowedUsers, which is not publicly readable.
     match /members/{memberId} {
       allow read: if true;
-      allow write: if isAllowedUser();
+      allow create, delete: if isAdmin();
+      // A member may edit their own display name and colour. Operational flags
+      // and googleUid stay admin-only — see touchesAdminOnlyFields().
+      allow update: if isAdmin()
+        || (isAllowedUser() && ownsMember(memberId) && !touchesAdminOnlyFields());
     }
 
     // Member profile pages. Separate from `members` (which must stay
@@ -68,7 +100,7 @@ service cloud.firestore {
     // this rule; the admin reads the collection unfiltered.
     match /memberProfiles/{memberId} {
       allow read: if resource.data.published == true || isAllowedUser();
-      allow write: if isAllowedUser();
+      allow write: if isAdmin() || (isAllowedUser() && ownsMember(memberId));
     }
 
     // Site settings: public read (the homepage and /request page gate on these),
