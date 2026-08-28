@@ -17,7 +17,10 @@ initializeApp({ credential: cert(require('./service-account.json')) });
 const db = getFirestore();
 const DRY_RUN = process.argv.includes('--dry-run');
 
-const ADMIN_EMAILS = ['thomasdhickman@gmail.com'];
+const ADMIN_EMAILS = [
+  'thomasdhickman@gmail.com',
+  'ultraphonicsmusic@gmail.com', // shared band account
+];
 
 async function run() {
   const users = (await db.collection('allowedUsers').get()).docs.map(d => ({ uid: d.id, ...d.data() }));
