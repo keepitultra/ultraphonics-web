@@ -54,6 +54,7 @@ function MembersContent() {
       status: prof.status || '',
       bio: prof.bio || '',
       favoriteArtists: (prof.favoriteArtists || []).join('\n'),
+      interests: (prof.interests || []).join('\n'),
       socials: { ...(prof.socials || {}) },
       theme: prof.theme || DEFAULT_THEME,
       font: prof.font || DEFAULT_FONT,
@@ -80,7 +81,7 @@ function MembersContent() {
       sortOrder: (all.length + 1) * 10, googleUid: '',
     });
     setProfile({
-      published: false, photoUrl: '', status: '', bio: '', favoriteArtists: '',
+      published: false, photoUrl: '', status: '', bio: '', favoriteArtists: '', interests: '',
       socials: {}, theme: DEFAULT_THEME, font: DEFAULT_FONT, pattern: DEFAULT_PATTERN,
     });
     setSearchParams({}, { replace: false });
@@ -130,6 +131,8 @@ function MembersContent() {
         status: profile.status.trim(),
         bio: profile.bio.trim(),
         favoriteArtists: profile.favoriteArtists
+          .split('\n').map(a => a.trim()).filter(Boolean).slice(0, 24),
+        interests: profile.interests
           .split('\n').map(a => a.trim()).filter(Boolean).slice(0, 24),
         socials: Object.fromEntries(
           Object.entries(profile.socials).filter(([, url]) => url && url.trim()).map(([k, url]) => [k, url.trim()]),
@@ -420,6 +423,16 @@ function MembersContent() {
                   value={profile.favoriteArtists}
                   onChange={e => setProf('favoriteArtists', e.target.value)}
                   placeholder={'Fleetwood Mac\nStevie Wonder\nParamore'}
+                />
+              </Field>
+
+              <Field label="Interests (one per line)">
+                <textarea
+                  rows={4}
+                  className={INPUT + ' resize-y'}
+                  value={profile.interests}
+                  onChange={e => setProf('interests', e.target.value)}
+                  placeholder={'Beer\nSoftware development\nVintage pedals'}
                 />
               </Field>
 

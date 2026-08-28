@@ -71,6 +71,7 @@ export default function MemberProfile() {
   const pattern = patternFor(profile);
   const accent = member.color || theme.muted;
   const artists = (profile.favoriteArtists || []).filter(Boolean);
+  const interests = (profile.interests || []).filter(Boolean);
   const socials = SOCIAL_PLATFORMS
     .map(p => ({ ...p, url: safeUrl(profile.socials?.[p.key]) }))
     .filter(p => p.url);
@@ -102,12 +103,10 @@ export default function MemberProfile() {
         <div className="rounded-2xl p-5 sm:p-7 flex flex-col sm:flex-row gap-6 items-center sm:items-start" style={panel}>
           <ProfilePhoto url={profile.photoUrl} name={member.name} accent={accent} />
           <div className="min-w-0 flex-1 text-center sm:text-left">
+            {/* Display name only — full names are deliberately not shown publicly. */}
             <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight" style={{ color: accent }}>
               {member.name}
             </h1>
-            {member.fullName && member.fullName !== member.name && (
-              <p className="text-sm mt-0.5" style={{ color: theme.muted }}>{member.fullName}</p>
-            )}
             {(member.roles || []).length > 0 && (
               <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start mt-3">
                 {member.roles.map(r => (
@@ -164,6 +163,22 @@ export default function MemberProfile() {
                 <span key={`${a}-${i}`} className="text-sm font-semibold px-3 py-1.5 rounded-lg"
                   style={{ background: `${accent}18`, border: `1px solid ${accent}33` }}>
                   {a}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {interests.length > 0 && (
+          <div className="rounded-2xl p-5 sm:p-7 mt-5" style={panel}>
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] mb-3" style={{ color: theme.muted }}>
+              Interests
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {interests.map((it, i) => (
+                <span key={`${it}-${i}`} className="text-sm font-semibold px-3 py-1.5 rounded-lg"
+                  style={{ background: `${accent}18`, border: `1px solid ${accent}33` }}>
+                  {it}
                 </span>
               ))}
             </div>
