@@ -74,3 +74,35 @@ export function fontFor(profile) {
 export function patternFor(profile) {
   return PATTERNS[profile?.pattern] || PATTERNS[DEFAULT_PATTERN];
 }
+
+/**
+ * Pull an 11-character video id out of any ordinary YouTube URL.
+ *
+ * Runs through safeUrl() first, so only http(s) links are ever considered, and
+ * the host must actually be YouTube — a member cannot point the player at an
+ * arbitrary origin. Returns null when there is nothing valid to play, which is
+ * what keeps the player hidden until it has been configured.
+ */
+export function parseYouTubeId(raw) {
+  const href = safeUrl(raw);
+  if (!href) return null;
+
+  let url;
+  try { url = new URL(href); } catch { return null; }
+
+  const host = url.hostname.replace(/^www\.|^m\./, '').toLowerCase();
+  const isYouTube = ['youtube.com', 'youtube-nocookie.com', 'youtu.be'].includes(host);
+  if (!isYouTube) return null;
+
+  let id = null;
+  if (host === 'youtu.be') {
+    id = url.pathname.slice(1).split('/')[0];
+  } else if (url.pathname === '/watch') {
+    id = url.searchParams.get('v');
+  } else {
+    const m = url.pathname.match(/^\/(?:embed|shorts|v|live)\/([^/?#]+)/);
+    if (m) id = m[1];
+  }
+
+  return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+}

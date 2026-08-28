@@ -7,7 +7,7 @@ import MemberAvatar from '../components/MemberAvatar.jsx';
 import { useMembersWithAccounts, useMemberProfileDocs, useIsAdmin } from '../firebase/useFirestore.js';
 import { saveBandMember, deleteBandMember, saveMemberProfile } from '../firestore-service.js';
 import { MEMBER_ROLES, slugifyMember, GUEST_COLOR } from '../utils/members.js';
-import { THEMES, FONTS, PATTERNS, SOCIAL_PLATFORMS, safeUrl, DEFAULT_THEME, DEFAULT_FONT, DEFAULT_PATTERN } from '../utils/profileThemes.js';
+import { THEMES, FONTS, PATTERNS, SOCIAL_PLATFORMS, safeUrl, parseYouTubeId, DEFAULT_THEME, DEFAULT_FONT, DEFAULT_PATTERN } from '../utils/profileThemes.js';
 
 const PALETTE = [
   '#22c55e', '#3b82f6', '#f59e0b', '#e879f9', '#fb923c', '#38bdf8',
@@ -72,6 +72,8 @@ function MembersContent() {
       bio: prof.bio || '',
       favoriteArtists: (prof.favoriteArtists || []).join('\n'),
       interests: (prof.interests || []).join('\n'),
+      musicUrl: prof.musicUrl || '',
+      musicTitle: prof.musicTitle || '',
       socials: { ...(prof.socials || {}) },
       theme: prof.theme || DEFAULT_THEME,
       font: prof.font || DEFAULT_FONT,
@@ -99,6 +101,7 @@ function MembersContent() {
     });
     setProfile({
       published: false, photoUrl: '', status: '', bio: '', favoriteArtists: '', interests: '',
+      musicUrl: '', musicTitle: '',
       socials: {}, theme: DEFAULT_THEME, font: DEFAULT_FONT, pattern: DEFAULT_PATTERN,
     });
     setSearchParams({}, { replace: false });
@@ -151,6 +154,8 @@ function MembersContent() {
           .split('\n').map(a => a.trim()).filter(Boolean).slice(0, 24),
         interests: profile.interests
           .split('\n').map(a => a.trim()).filter(Boolean).slice(0, 24),
+        musicUrl: profile.musicUrl.trim(),
+        musicTitle: profile.musicTitle.trim(),
         socials: Object.fromEntries(
           Object.entries(profile.socials).filter(([, url]) => url && url.trim()).map(([k, url]) => [k, url.trim()]),
         ),
@@ -462,6 +467,46 @@ function MembersContent() {
                   value={profile.interests}
                   onChange={e => setProf('interests', e.target.value)}
                   placeholder={'Beer\nSoftware development\nVintage pedals'}
+                />
+              </Field>
+
+              <Field label="Music player (YouTube link)">
+                <input
+                  className={INPUT}
+                  value={profile.musicUrl}
+                  onChange={e => setProf('musicUrl', e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+                {profile.musicUrl.trim() && !parseYouTubeId(profile.musicUrl) && (
+                  <p className="text-[11px] text-red-400 mt-1">
+                    Not a YouTube video link. Paste a watch, youtu.be, or shorts URL.
+                  </p>
+                )}
+                {parseYouTubeId(profile.musicUrl) && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <img
+                      src={`https://i.ytimg.com/vi/${parseYouTubeId(profile.musicUrl)}/mqdefault.jpg`}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="w-16 h-16 rounded-lg object-cover border border-[#2a2a2a]"
+                    />
+                    <p className="text-[11px] text-[#22c55e]">
+                      <i className="fas fa-check mr-1" />Player will show on your page.
+                    </p>
+                  </div>
+                )}
+                <p className="text-[11px] text-[#555] mt-1.5">
+                  Leave blank for no player. It never autoplays &mdash; visitors press play.
+                </p>
+              </Field>
+
+              <Field label="Player track label">
+                <input
+                  className={INPUT}
+                  maxLength={80}
+                  value={profile.musicTitle}
+                  onChange={e => setProf('musicTitle', e.target.value)}
+                  placeholder="Song name — Artist"
                 />
               </Field>
 

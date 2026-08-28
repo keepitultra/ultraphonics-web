@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getMemberProfile } from '../firestore-service.js';
 import { useMembers } from '../firebase/useFirestore.js';
-import { THEMES, FONTS, PATTERNS, SOCIAL_PLATFORMS, safeUrl, themeFor, fontFor, patternFor } from '../utils/profileThemes.js';
+import { THEMES, FONTS, PATTERNS, SOCIAL_PLATFORMS, safeUrl, themeFor, fontFor, patternFor, parseYouTubeId } from '../utils/profileThemes.js';
+import MyspacePlayer from '../components/MyspacePlayer.jsx';
 
 /** External image, hardened: only http(s), no referrer leak, graceful failure. */
 function ProfilePhoto({ url, name, accent, size = 190 }) {
@@ -72,6 +73,8 @@ export default function MemberProfile() {
   const accent = member.color || theme.muted;
   const artists = (profile.favoriteArtists || []).filter(Boolean);
   const interests = (profile.interests || []).filter(Boolean);
+  // Player only exists once a valid YouTube link has been configured.
+  const videoId = parseYouTubeId(profile.musicUrl);
   const socials = SOCIAL_PLATFORMS
     .map(p => ({ ...p, url: safeUrl(profile.socials?.[p.key]) }))
     .filter(p => p.url);
@@ -142,6 +145,15 @@ export default function MemberProfile() {
             )}
           </div>
         </div>
+
+        {videoId && (
+          <MyspacePlayer
+            videoId={videoId}
+            title={profile.musicTitle}
+            accent={accent}
+            theme={theme}
+          />
+        )}
 
         {/* Bio — rendered as text; newlines preserved, markup never interpreted */}
         {profile.bio && (
