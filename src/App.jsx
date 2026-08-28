@@ -25,6 +25,8 @@ import ClientManager from './pages/ClientManager.jsx';
 import ShowManager from './pages/ShowManager.jsx';
 import SongRequestsManager from './pages/SongRequestsManager.jsx';
 import MemberManager from './pages/MemberManager.jsx';
+import BandIndex from './pages/BandIndex.jsx';
+import MemberProfile from './pages/MemberProfile.jsx';
 
 const APP_ROUTES = ['/setlists', '/songs', '/clients', '/shows', '/events', '/requests', '/request', '/members'];
 
@@ -58,6 +60,8 @@ function PublicLayout() {
         <Route path="/live" element={<LiveViewer />} />
         <Route path="/events/:id" element={<EventPage />} />
         <Route path="/request" element={<SongRequest />} />
+        <Route path="/band" element={<BandIndex />} />
+        <Route path="/band/:memberId" element={<MemberProfile />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/admin/*" element={<AdminRouter />} />
         <Route path="/setlists" element={<AdminDrawerProvider><SetlistManager /></AdminDrawerProvider>} />

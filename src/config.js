@@ -31,6 +31,10 @@ export const config = {
       label: "Services",
       link: "services.html",
     },
+    band: {
+      label: "Band",
+      link: "/band",
+    },
     quote: {
       label: "Request a Quote",
       link: "quote-request.html",

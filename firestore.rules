@@ -61,6 +61,16 @@ service cloud.firestore {
       allow write: if isAllowedUser();
     }
 
+    // Member profile pages. Separate from `members` (which must stay
+    // world-readable so the shared setlist can resolve names and colours) so an
+    // UNPUBLISHED draft is genuinely unreadable rather than just hidden by the
+    // UI. Anonymous list queries must filter on published == true to satisfy
+    // this rule; the admin reads the collection unfiltered.
+    match /memberProfiles/{memberId} {
+      allow read: if resource.data.published == true || isAllowedUser();
+      allow write: if isAllowedUser();
+    }
+
     // Site settings: public read (the homepage and /request page gate on these),
     // allowlisted write. Single doc: settings/global
     match /settings/{docId} {

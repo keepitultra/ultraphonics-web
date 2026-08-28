@@ -3,9 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import MemberAvatar from '../components/MemberAvatar.jsx';
-import { useMembersWithAccounts } from '../firebase/useFirestore.js';
-import { saveBandMember, deleteBandMember } from '../firestore-service.js';
+import { useMembersWithAccounts, useMemberProfileDocs } from '../firebase/useFirestore.js';
+import { saveBandMember, deleteBandMember, saveMemberProfile } from '../firestore-service.js';
 import { MEMBER_ROLES, slugifyMember, GUEST_COLOR } from '../utils/members.js';
+import { THEMES, FONTS, PATTERNS, SOCIAL_PLATFORMS, safeUrl, DEFAULT_THEME, DEFAULT_FONT, DEFAULT_PATTERN } from '../utils/profileThemes.js';
 
 const PALETTE = [
   '#22c55e', '#3b82f6', '#f59e0b', '#e879f9', '#fb923c', '#38bdf8',
@@ -18,10 +19,12 @@ function MembersContent() {
   const navigate = useNavigate();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { all, authUsers, loading } = useMembersWithAccounts();
+  const { data: profileDocs = [] } = useMemberProfileDocs();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get('m');
 
   const [form, setForm] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [isNew, setIsNew] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,8 +47,20 @@ function MembersContent() {
       sortOrder: selected.sortOrder ?? 999,
       googleUid: selected.googleUid || '',
     });
+    const prof = profileDocs.find(p => p.id === selected.id) || {};
+    setProfile({
+      published: !!prof.published,
+      photoUrl: prof.photoUrl || '',
+      status: prof.status || '',
+      bio: prof.bio || '',
+      favoriteArtists: (prof.favoriteArtists || []).join('\n'),
+      socials: { ...(prof.socials || {}) },
+      theme: prof.theme || DEFAULT_THEME,
+      font: prof.font || DEFAULT_FONT,
+      pattern: prof.pattern || DEFAULT_PATTERN,
+    });
     setDirty(false);
-  }, [selectedId, selected?.updatedAt]);
+  }, [selectedId, selected?.updatedAt, profileDocs]);
 
   function select(id) {
     if (dirty && !window.confirm('Discard unsaved changes?')) return;
@@ -64,10 +79,19 @@ function MembersContent() {
       canSingLead: false, type: 'member', active: true,
       sortOrder: (all.length + 1) * 10, googleUid: '',
     });
+    setProfile({
+      published: false, photoUrl: '', status: '', bio: '', favoriteArtists: '',
+      socials: {}, theme: DEFAULT_THEME, font: DEFAULT_FONT, pattern: DEFAULT_PATTERN,
+    });
     setSearchParams({}, { replace: false });
   }
 
   const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setDirty(true); };
+  const setProf = (k, v) => { setProfile(p => ({ ...p, [k]: v })); setDirty(true); };
+  const setSocial = (k, v) => {
+    setProfile(p => ({ ...p, socials: { ...p.socials, [k]: v } }));
+    setDirty(true);
+  };
 
   function toggleRole(role) {
     setForm(f => ({
@@ -99,6 +123,20 @@ function MembersContent() {
         active: form.active,
         sortOrder: Number(form.sortOrder) || 999,
         googleUid: form.googleUid || null,
+      });
+      await saveMemberProfile(id, {
+        published: !!profile.published,
+        photoUrl: profile.photoUrl.trim(),
+        status: profile.status.trim(),
+        bio: profile.bio.trim(),
+        favoriteArtists: profile.favoriteArtists
+          .split('\n').map(a => a.trim()).filter(Boolean).slice(0, 24),
+        socials: Object.fromEntries(
+          Object.entries(profile.socials).filter(([, url]) => url && url.trim()).map(([k, url]) => [k, url.trim()]),
+        ),
+        theme: profile.theme,
+        font: profile.font,
+        pattern: profile.pattern,
       });
       setIsNew(false);
       setDirty(false);
@@ -202,7 +240,7 @@ function MembersContent() {
           </div>
         )}
 
-        {form && (
+        {form && profile && (
           <div className="p-5 space-y-6 max-w-xl">
             <div className="grid grid-cols-2 gap-4">
               <Field label="Display name *">
@@ -294,6 +332,149 @@ function MembersContent() {
                 onChange={e => set('sortOrder', e.target.value)}
               />
             </Field>
+
+            {/* ── Public profile page ─────────────────────────────────── */}
+            <div className="pt-4 border-t border-[#2a2a2a] space-y-5">
+              <div className="flex items-center justify-between gap-3">
+                <label className="block text-xs font-semibold text-[#888] uppercase tracking-wider">
+                  Public Profile Page
+                </label>
+                {profile.published && !isNew && (
+                  <a
+                    href={`/band/${form.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-[#00ddde] hover:underline"
+                  >
+                    View live <i className="fas fa-arrow-up-right-from-square text-[9px]" />
+                  </a>
+                )}
+              </div>
+
+              <Toggle
+                checked={profile.published}
+                onChange={v => setProf('published', v)}
+                color={form.color}
+                label="Publish this page"
+                hint={profile.published
+                  ? `Live at /band/${form.id || '…'} and listed on the Band page.`
+                  : 'Off — the page returns "no profile here" and is left off the Band index.'}
+              />
+
+              <p className="text-[11px] text-[#7a6a3a] bg-amber-400/5 border border-amber-400/20 rounded-lg p-2.5">
+                <i className="fas fa-circle-info mr-1" />
+                Everything below is written for the public. Links and text are shown
+                as plain text — HTML and scripts are never run — but don&rsquo;t put
+                anything private here.
+              </p>
+
+              <Field label="Photo URL">
+                <input
+                  className={INPUT}
+                  value={profile.photoUrl}
+                  onChange={e => setProf('photoUrl', e.target.value)}
+                  placeholder="https://.../photo.jpg"
+                />
+                {profile.photoUrl && !safeUrl(profile.photoUrl) && (
+                  <p className="text-[11px] text-red-400 mt-1">
+                    Needs to be a full http:// or https:// link.
+                  </p>
+                )}
+                {safeUrl(profile.photoUrl) && (
+                  <img
+                    src={safeUrl(profile.photoUrl)}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="mt-2 w-24 h-24 rounded-xl object-cover border border-[#2a2a2a]"
+                    onError={e => { e.currentTarget.style.display = 'none'; }}
+                  />
+                )}
+              </Field>
+
+              <Field label="Status line">
+                <input
+                  className={INPUT}
+                  maxLength={120}
+                  value={profile.status}
+                  onChange={e => setProf('status', e.target.value)}
+                  placeholder="currently overplaying the bridge"
+                />
+              </Field>
+
+              <Field label="Bio">
+                <textarea
+                  rows={5}
+                  className={INPUT + ' resize-y'}
+                  maxLength={2000}
+                  value={profile.bio}
+                  onChange={e => setProf('bio', e.target.value)}
+                  placeholder="Tell people who you are..."
+                />
+                <p className="text-[11px] text-[#555] mt-1">{profile.bio.length}/2000</p>
+              </Field>
+
+              <Field label="Favourite artists (one per line)">
+                <textarea
+                  rows={4}
+                  className={INPUT + ' resize-y'}
+                  value={profile.favoriteArtists}
+                  onChange={e => setProf('favoriteArtists', e.target.value)}
+                  placeholder={'Fleetwood Mac\nStevie Wonder\nParamore'}
+                />
+              </Field>
+
+              <Field label="Socials">
+                <div className="space-y-2">
+                  {SOCIAL_PLATFORMS.map(sp => {
+                    const value = profile.socials[sp.key] || '';
+                    const bad = value.trim() && !safeUrl(value);
+                    return (
+                      <div key={sp.key} className="flex items-center gap-2">
+                        <i className={`${sp.icon} w-5 text-center text-[#888]`} title={sp.label} />
+                        <input
+                          className={INPUT + (bad ? ' border-red-500/60' : '')}
+                          value={value}
+                          onChange={e => setSocial(sp.key, e.target.value)}
+                          placeholder={`${sp.label} URL`}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <Field label="Theme">
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(THEMES).map(([key, t]) => (
+                    <button
+                      key={key}
+                      onClick={() => setProf('theme', key)}
+                      className="min-h-[44px] px-3 rounded-xl text-sm font-semibold transition-all"
+                      style={{
+                        background: t.panel,
+                        color: t.text,
+                        border: profile.theme === key ? `2px solid ${form.color}` : `1px solid ${t.border}`,
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Font">
+                  <select className={INPUT} value={profile.font} onChange={e => setProf('font', e.target.value)}>
+                    {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Background">
+                  <select className={INPUT} value={profile.pattern} onChange={e => setProf('pattern', e.target.value)}>
+                    {Object.entries(PATTERNS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
+                  </select>
+                </Field>
+              </div>
+            </div>
 
             {/* Google account link — the basis for calendar invites later */}
             <div className="pt-4 border-t border-[#2a2a2a]">

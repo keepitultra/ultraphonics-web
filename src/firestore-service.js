@@ -28,7 +28,8 @@ const COLLECTIONS = {
   QUOTES: 'quotes',
   SONG_REQUESTS: 'songRequests',
   SETTINGS: 'settings',
-  MEMBERS: 'members'
+  MEMBERS: 'members',
+  MEMBER_PROFILES: 'memberProfiles'
 };
 
 // Site-wide settings live in a single document so the public pages need exactly
@@ -528,6 +529,49 @@ export async function saveBandMember(memberId, data) {
  */
 export async function deleteBandMember(memberId) {
   await deleteDoc(doc(db, COLLECTIONS.MEMBERS, memberId));
+}
+
+// ============= MEMBER PROFILES =============
+// Public-facing profile pages. Kept apart from `members` so an unpublished
+// draft is genuinely unreadable rather than merely hidden by the UI.
+
+/**
+ * Subscribe to every profile (admin — reads published and unpublished alike).
+ */
+export function subscribeToMemberProfiles(callback, onError) {
+  return onSnapshot(
+    collection(db, COLLECTIONS.MEMBER_PROFILES),
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Published profiles only. The published filter is required, not an
+ * optimisation: the security rule only permits an anonymous read of documents
+ * where published == true, so an unfiltered query would be rejected outright.
+ */
+export function subscribeToPublishedProfiles(callback, onError) {
+  return onSnapshot(
+    query(collection(db, COLLECTIONS.MEMBER_PROFILES), where('published', '==', true)),
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/** One profile by member id. Returns null when missing or unpublished. */
+export async function getMemberProfile(memberId) {
+  const snapshot = await getDoc(doc(db, COLLECTIONS.MEMBER_PROFILES, memberId));
+  return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+}
+
+/** Create or update a profile. Merges, so callers send only what changed. */
+export async function saveMemberProfile(memberId, data) {
+  await setDoc(
+    doc(db, COLLECTIONS.MEMBER_PROFILES, memberId),
+    { ...data, updatedAt: new Date().toISOString() },
+    { merge: true },
+  );
 }
 
 // ============= SETTINGS =============

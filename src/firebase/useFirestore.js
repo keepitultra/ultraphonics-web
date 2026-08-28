@@ -16,6 +16,8 @@ import {
   subscribeToMembers,
   subscribeToSettings,
   subscribeToBandMembers,
+  subscribeToMemberProfiles,
+  subscribeToPublishedProfiles,
 } from '../firestore-service.js';
 
 // ── Generic real-time subscription hook ─────────────────────
@@ -184,4 +186,23 @@ export function useMembersWithAccounts() {
     const authByUid = new Map(authUsers.map(u => [u.uid, u]));
     return { ...buildMemberIndex(members, authByUid), loading, authUsers };
   }, [members, authUsers, loading]);
+}
+
+/** All member profiles, published or not (admin only). */
+export function useMemberProfileDocs() {
+  return useSubscription(subscribeToMemberProfiles);
+}
+
+/** Published member profiles, joined to their roster entry. Public-safe. */
+export function usePublishedProfiles() {
+  const { data: profiles = [], loading } = useSubscription(subscribeToPublishedProfiles);
+  const members = useMembers();
+  return useMemo(() => {
+    const joined = profiles
+      .map(p => ({ ...p, member: members.byId.get(p.id) }))
+      // A profile whose member was deleted or deactivated should stop showing.
+      .filter(p => p.member && p.member.active !== false)
+      .sort((a, b) => (a.member.sortOrder ?? 999) - (b.member.sortOrder ?? 999));
+    return { profiles: joined, loading: loading || members.loading };
+  }, [profiles, members, loading]);
 }
