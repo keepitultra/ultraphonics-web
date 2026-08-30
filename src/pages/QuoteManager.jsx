@@ -10,7 +10,7 @@ import {
 } from '../firestore-service.js';
 import {
   QUOTE_STATUSES, QUOTE_STATUS_COLORS,
-  quoteToClient, buildQuoteLogContent,
+  quoteToClient, buildQuoteLogContent, quoteKind,
 } from '../utils/quoteForm.js';
 import { playChime } from '../utils/chime.js';
 
@@ -76,6 +76,7 @@ function QuoteManager() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('qm_status') || 'All');
   const [sortBy, setSortBy] = useState('received');
+  const [kindFilter, setKindFilter] = useState('all');
   const [convertOpen, setConvertOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -101,13 +102,14 @@ function QuoteManager() {
     const term = search.trim().toLowerCase();
     return quotes
       .filter(q => statusFilter === 'All' || q.status === statusFilter)
+      .filter(q => kindFilter === 'all' || quoteKind(q) === kindFilter)
       .filter(q => !term || `${q.name} ${q.email} ${q.venue} ${q.location}`.toLowerCase().includes(term))
       .sort((a, b) => {
         if (sortBy === 'event') return String(a.date).localeCompare(String(b.date));
         if (sortBy === 'name') return String(a.name).localeCompare(String(b.name));
         return receivedAtMs(b) - receivedAtMs(a);
       });
-  }, [quotes, statusFilter, search, sortBy]);
+  }, [quotes, statusFilter, kindFilter, search, sortBy]);
 
   const quote = quotes.find(q => q.id === selectedId) || null;
 
@@ -231,6 +233,20 @@ function QuoteManager() {
             );
           })}
         </div>
+        <div className="flex gap-1">
+          {[['all', 'All'], ['quote', 'Quotes'], ['contact', 'Contact']].map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setKindFilter(k)}
+              className="flex-1 min-h-[30px] rounded-lg text-[11px] font-semibold transition-colors"
+              style={kindFilter === k
+                ? { background: '#2a2a2a', color: '#fff' }
+                : { color: '#777', border: '1px solid #2a2a2a' }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none">
@@ -273,9 +289,13 @@ function QuoteManager() {
                     {q.name}
                   </div>
                   <div className="text-[11px] text-[#888] truncate mt-0.5">
-                    {q.eventType}{q.date ? ` · ${formatDate(q.date)}` : ''}
+                    {quoteKind(q) === 'contact'
+                      ? <span className="inline-flex items-center gap-1"><i className="fas fa-envelope text-[9px]" />Contact message</span>
+                      : <>{q.eventType}{q.date ? ` \u00b7 ${formatDate(q.date)}` : ''}</>}
                   </div>
-                  <div className="text-[11px] text-[#666] truncate">{q.location}</div>
+                  <div className="text-[11px] text-[#666] truncate">
+                    {quoteKind(q) === 'contact' ? q.email : q.location}
+                  </div>
                 </div>
                 <QuoteStatusBadge status={q.status} />
               </div>
@@ -291,7 +311,8 @@ function QuoteManager() {
   );
 
   // ── Right ───────────────────────────────────────────────────────────────
-  const days = quote ? daysUntil(quote.date) : null;
+  const isContact = quote ? quoteKind(quote) === 'contact' : false;
+  const days = quote && !isContact ? daysUntil(quote.date) : null;
 
   const rightPanel = (
     <div className="relative flex-1 min-w-0 flex flex-col overflow-hidden bg-[#121212] text-left">
@@ -309,6 +330,12 @@ function QuoteManager() {
           <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a]">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="flex-1 min-w-0 text-base font-bold text-white truncate">{quote.name}</h1>
+              {isContact && (
+                <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: '#78716c20', color: '#a8a29e', border: '1px solid #78716c45' }}>
+                  Contact
+                </span>
+              )}
               <QuoteStatusBadge status={quote.status} />
               <select
                 value={quote.status}
@@ -392,37 +419,37 @@ function QuoteManager() {
               </InfoRow>
             </Card>
 
-            <Card title="Event">
+            {isContact ? null : <Card title="Event">
               <InfoRow label="Type" value={quote.eventType === 'Other' && quote.eventTypeOther
                 ? `Other (${quote.eventTypeOther})` : quote.eventType} />
               <InfoRow label="Date" value={formatDate(quote.date)} accent />
               <InfoRow label="Location" value={quote.location} />
               <InfoRow label="Venue" value={quote.venue} />
               <InfoRow label="Setting" value={quote.setting} />
-            </Card>
+            </Card>}
 
-            <Card title="Logistics">
+            {isContact ? null : <Card title="Logistics">
               <InfoRow label="Guests" value={quote.guests} />
               <InfoRow label="Duration" value={quote.duration} />
               <InfoRow label="Hard stop" value={quote.hardStop} />
-            </Card>
+            </Card>}
 
-            <Card title="Band & Music">
+            {isContact ? null : <Card title="Band & Music">
               <InfoRow label="Band size" value={quote.bandSize} />
               <InfoRow label="Open to recs" value={quote.openToRec ? 'Yes' : 'No'} />
               <InfoRow label="Services"><Pills items={quote.services} /></InfoRow>
               <InfoRow label="Genres"><Pills items={quote.genres} /></InfoRow>
-            </Card>
+            </Card>}
 
-            <Card title="Production & Budget">
+            {isContact ? null : <Card title="Production & Budget">
               <InfoRow label="Sound" value={quote.sound} />
               <InfoRow label="Lighting" value={quote.lighting} />
               <InfoRow label="Budget" value={quote.budget} accent />
               <InfoRow label="Urgency" value={quote.urgency} />
-            </Card>
+            </Card>}
 
             {quote.notes && (
-              <Card title="Notes">
+              <Card title={isContact ? 'Message' : 'Notes'}>
                 <pre className="whitespace-pre-wrap font-sans text-sm text-[#ccc]">{quote.notes}</pre>
               </Card>
             )}

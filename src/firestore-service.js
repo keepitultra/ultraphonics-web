@@ -682,6 +682,8 @@ export async function createQuoteRequest(fields) {
   await setDoc(ref, {
     ...fields,
     id: ref.id,
+    // Default for callers that predate the contact form sharing this collection.
+    kind: fields.kind || 'quote',
     status: 'New',
     source: 'web',
     createdAt: new Date().toISOString(),

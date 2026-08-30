@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { config } from '../config.js';
+import { createQuoteRequest } from '../firestore-service.js';
+import { serializeContactForm, withTimeout } from '../utils/quoteForm.js';
 
 const { emailjs: ejs } = config.ids;
 
 export default function Contact() {
   const formRef = useRef(null);
   const navigate = useNavigate();
+  const savedIdRef = useRef(null);
   const [status, setStatus] = useState({ text: '', type: '' });
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,25 +27,47 @@ export default function Contact() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!window.emailjs) {
-      setStatus({ text: 'Error: EmailJS not configured.', type: 'error' });
-      return;
-    }
+    if (submitting) return;
     setSubmitting(true);
     setStatus({ text: '', type: '' });
+
+    const form = formRef.current;
+    const fields = serializeContactForm(form);
+
+    // Persist first, exactly as the quote form does. The email is only a
+    // notification, and a CDN or EmailJS failure used to lose the message.
+    let savedId = savedIdRef.current;
+    if (!savedId) {
+      try {
+        savedId = await withTimeout(createQuoteRequest(fields), 6000);
+        savedIdRef.current = savedId;
+      } catch (err) {
+        console.error('Contact save failed:', err);
+      }
+    }
+
+    let emailed = false;
     try {
-      const visitorName = formRef.current.elements.name?.value || '';
-      await window.emailjs.sendForm(ejs.serviceId, ejs.contactTemplateId, formRef.current);
-      formRef.current.reset();
-      // replace, so Back does not return to a spent form that looks resubmittable.
-      navigate('/thank-you?from=contact', { replace: true, state: { name: visitorName } });
-      return;
+      if (window.emailjs) {
+        await window.emailjs.sendForm(ejs.serviceId, ejs.contactTemplateId, form);
+        emailed = true;
+      }
     } catch (err) {
       console.error('EmailJS error:', err);
-      setStatus({ text: 'Oops! There was a problem. Please try again or email us directly.', type: 'error' });
-    } finally {
-      setSubmitting(false);
     }
+
+    if (savedId || emailed) {
+      const visitorName = fields.name;
+      form.reset();
+      navigate('/thank-you?from=contact', { replace: true, state: { name: visitorName } });
+      return;
+    }
+
+    setStatus({
+      text: 'Sorry — we could not send that. Please email info@ultraphonicsmusic.com, or try again.',
+      type: 'error',
+    });
+    setSubmitting(false);
   }
 
   return (

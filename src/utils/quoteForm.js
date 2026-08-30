@@ -48,6 +48,10 @@ export const QUOTE_OPTIONS = {
   urgency:   ['Information Gathering', 'Ready to Book', 'Immediate'],
 };
 
+/** Both kinds live in the `quotes` collection; older docs predate the field. */
+export const QUOTE_KINDS = { quote: 'Quote', contact: 'Contact' };
+export function quoteKind(quote) { return quote?.kind === 'contact' ? 'contact' : 'quote'; }
+
 export const QUOTE_STATUSES = ['New', 'Contacted', 'Quoted', 'Won', 'Lost'];
 
 // Deliberately separate from ClientManager's STATUS_COLORS, which falls through
@@ -70,9 +74,47 @@ export const QUOTE_STATUS_COLORS = {
  * Every key is always present — '' / [] / false for blanks — because the rule
  * requires hasAll(), and it keeps the admin UI free of undefined checks.
  */
+function blankQuoteFields() {
+  const out = {};
+  for (const { key, kind } of QUOTE_FIELDS) {
+    out[key] = kind === 'list' ? [] : kind === 'bool' ? false : '';
+  }
+  return out;
+}
+
+function campaignFields() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    utmSource: (params.get('utm_source') || '').slice(0, 100),
+    utmMedium: (params.get('utm_medium') || '').slice(0, 100),
+    utmCampaign: (params.get('utm_campaign') || '').slice(0, 120),
+    referrer: (document.referrer || '').slice(0, 300),
+  };
+}
+
+/**
+ * Read the contact form into the same document shape as a quote.
+ *
+ * Every event field stays blank — the create rule enforces exactly that for
+ * kind 'contact', so a contact message can never masquerade as a booking with
+ * half-filled event details.
+ */
+export function serializeContactForm(formEl) {
+  const data = new FormData(formEl);
+  return {
+    ...blankQuoteFields(),
+    kind: 'contact',
+    name: (data.get('name') || '').toString().trim(),
+    email: (data.get('email') || '').toString().trim(),
+    phone: (data.get('phone') || '').toString().trim(),
+    notes: (data.get('message') || '').toString().trim(),
+    ...campaignFields(),
+  };
+}
+
 export function serializeQuoteForm(formEl) {
   const data = new FormData(formEl);
-  const out = {};
+  const out = { kind: 'quote' };
   for (const { form, key, kind } of QUOTE_FIELDS) {
     if (kind === 'list') out[key] = data.getAll(form).map(String);
     else if (kind === 'bool') out[key] = data.get(form) === 'Yes';
@@ -81,12 +123,7 @@ export function serializeQuoteForm(formEl) {
 
   // Campaign provenance — scripts/utm-links.json already drives traffic here,
   // so knowing which campaign produced a lead is worth the four extra fields.
-  const params = new URLSearchParams(window.location.search);
-  out.utmSource   = (params.get('utm_source') || '').slice(0, 100);
-  out.utmMedium   = (params.get('utm_medium') || '').slice(0, 100);
-  out.utmCampaign = (params.get('utm_campaign') || '').slice(0, 120);
-  out.referrer    = (document.referrer || '').slice(0, 300);
-  return out;
+  return { ...out, ...campaignFields() };
 }
 
 /** Reject a promise that never settles, so a stalled write can't strand the UI. */
@@ -130,7 +167,8 @@ const CLIENT_TYPE_BY_EVENT = {
  * one, so this stays pure and the id can never be reused across conversions.
  */
 export function quoteToClient(quote) {
-  const isOrg = ORG_EVENTS.includes(quote.eventType);
+  const isContact = quoteKind(quote) === 'contact';
+  const isOrg = !isContact && ORG_EVENTS.includes(quote.eventType);
   const { city, state } = parseCityState(quote.location);
 
   const logistics = [
@@ -144,7 +182,7 @@ export function quoteToClient(quote) {
   ].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
 
   const tags = [
-    String(quote.eventType || '').toLowerCase().replace(/\s+/g, '-'),
+    isContact ? 'contact' : String(quote.eventType || '').toLowerCase().replace(/\s+/g, '-'),
     'web-lead',
     quote.utmCampaign || null,
   ].filter(Boolean);
@@ -154,7 +192,7 @@ export function quoteToClient(quote) {
     // Only set separately for organisations — otherwise the list row would
     // render the same name twice, which reads as a bug.
     contactName: isOrg ? quote.name : '',
-    type: CLIENT_TYPE_BY_EVENT[quote.eventType] || 'Private',
+    type: isContact ? 'Private' : (CLIENT_TYPE_BY_EVENT[quote.eventType] || 'Private'),
     status: 'Lead',
     preferredContact: 'Website Form',
     email: quote.email || '',
@@ -174,6 +212,14 @@ export function quoteToClient(quote) {
 /** The digest an admin wants before picking up the phone. */
 export function buildQuoteLogContent(quote) {
   const lines = [];
+  if (quoteKind(quote) === 'contact') {
+    lines.push('Contact form message');
+    if (quote.phone) lines.push(`Phone: ${quote.phone}`);
+    if (quote.notes) lines.push('', `"${quote.notes}"`);
+    const utmC = [quote.utmSource, quote.utmMedium, quote.utmCampaign].filter(Boolean).join(' / ');
+    if (utmC) lines.push('', `Source: ${utmC}`);
+    return lines.join('\n');
+  }
   const head = [
     quote.eventType === 'Other' && quote.eventTypeOther ? `Other (${quote.eventTypeOther})` : quote.eventType,
     quote.date,

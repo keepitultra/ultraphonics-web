@@ -5,7 +5,7 @@ import AuthGuard from '../../components/AuthGuard.jsx';
 import SettingsModal from '../../components/admin/SettingsModal.jsx';
 import HeadsUpSection from '../../components/admin/HeadsUpSection.jsx';
 import { useAuth } from '../../firebase/AuthContext.jsx';
-import { useSetlists, useSongs, useClients, useShows, useMemberProfiles } from '../../firebase/useFirestore.js';
+import { useSetlists, useSongs, useClients, useShows, useMemberProfiles, useQuotes } from '../../firebase/useFirestore.js';
 
 // ── App tile (large, colored accent) ────────────────────────────────────────
 function AppTile({ to, href, color, icon, title, subtitle }) {
@@ -59,6 +59,8 @@ function AdminDashboard() {
   const { data: shows    = [] } = useShows();
 
   const firstName         = user?.displayName?.split(' ')[0] || null;
+  const { data: quoteLeads = [] } = useQuotes();
+  const newLeadCount = quoteLeads.filter(q => q.status === 'New').length;
   const activeClientCount = clients.filter(c => c.status === 'Active').length;
 
   function handleSettingsClose() {
@@ -197,6 +199,15 @@ function AdminDashboard() {
                 icon={<i className="fas fa-calendar-days" />}
                 title="Shows"
                 subtitle="Manage upcoming & past shows"
+              />
+              <AppTile
+                to="/quotes"
+                color="#ec4899"
+                icon={<i className="fas fa-file-invoice-dollar" />}
+                title="Quotes & Leads"
+                subtitle={newLeadCount
+                  ? `${newLeadCount} new lead${newLeadCount !== 1 ? 's' : ''}`
+                  : 'Quote requests & contact messages'}
               />
             </div>
             <div className="border-t border-[#2a2a2a] pt-3 space-y-0.5">

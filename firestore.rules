@@ -92,7 +92,7 @@ service cloud.firestore {
     // there without redeploying rules silently rejects every submission using it.
     function quoteKeys() {
       return [
-        'id','name','email','phone','eventType','eventTypeOther','date','location',
+        'id','kind','name','email','phone','eventType','eventTypeOther','date','location',
         'venue','setting','guests','duration','hardStop','bandSize','openToRec',
         'services','genres','sound','lighting','budget','urgency','notes',
         'status','createdAt','receivedAt','source',
@@ -103,6 +103,23 @@ service cloud.firestore {
     function qOpt(v, options)       { return v is string && (v == '' || v in options); }
     function qList(v, options, max) { return v is list && v.size() <= max && v.toSet().hasOnly(options); }
 
+    // A contact message is the same document with every event field blank and a
+    // note that actually says something. Keeping both kinds in one collection
+    // means one inbox, one pipeline, and one path into the CRM.
+    function isContactShape(d) {
+      return d.notes.size() > 0
+        && d.eventType == '' && d.eventTypeOther == '' && d.date == ''
+        && d.location == '' && d.venue == ''
+        && d.openToRec == false
+        && d.services.size() == 0 && d.genres.size() == 0;
+    }
+
+    function isQuoteShape(d) {
+      return d.location.size() > 0
+        && d.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && d.eventType in ['Wedding','Corporate','Private Party','Festival','Other'];
+    }
+
     function isValidNewQuote(quoteId) {
       let d = request.resource.data;
       return d.keys().hasOnly(quoteKeys()) && d.keys().hasAll(quoteKeys())
@@ -110,12 +127,14 @@ service cloud.firestore {
         && d.status == 'New'
         && d.source == 'web'
         && d.receivedAt == request.time
+        && d.kind in ['quote','contact']
         && qStr(d.createdAt, 40)
         && qStr(d.name, 120)     && d.name.size() > 0
         && qStr(d.email, 200)    && d.email.matches('^[^@\\s]+@[^@\\s]+$')
-        && qStr(d.location, 200) && d.location.size() > 0
-        && qStr(d.date, 12)      && d.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
-        && d.eventType in ['Wedding','Corporate','Private Party','Festival','Other']
+        && qStr(d.location, 200)
+        && qStr(d.date, 12)
+        && qStr(d.eventType, 20)
+        && (d.kind == 'contact' ? isContactShape(d) : isQuoteShape(d))
         && qStr(d.phone, 40)
         && qStr(d.eventTypeOther, 120)
         && qStr(d.venue, 200)
