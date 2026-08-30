@@ -57,7 +57,6 @@ function AdminDashboard() {
   const { data: songs    = [] } = useSongs();
   const { data: clients  = [] } = useClients();
   const { data: shows    = [] } = useShows();
-  const memberProfiles           = useMemberProfiles();
 
   const firstName         = user?.displayName?.split(' ')[0] || null;
   const activeClientCount = clients.filter(c => c.status === 'Active').length;
@@ -138,7 +137,7 @@ function AdminDashboard() {
           className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}
         >
           <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-6">
-            <HeadsUpSection shows={shows} clients={clients} memberProfiles={memberProfiles} onTotalCount={setHeadsUpCount} />
+            <HeadsUpSection shows={shows} clients={clients} onTotalCount={setHeadsUpCount} />
           </div>
         </aside>
 

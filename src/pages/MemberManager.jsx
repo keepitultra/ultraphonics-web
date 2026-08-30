@@ -204,7 +204,7 @@ function MembersContent() {
               selectedId === m.id ? 'bg-white/5 border-l-2 border-l-[#00ddde]' : 'hover:bg-white/5'
             }`}
           >
-            <MemberAvatar name={m.name} color={m.color} size={32} profiles={m.photoURL ? { [m.name]: { photoURL: m.photoURL } } : {}} />
+            <MemberAvatar name={m.name} color={m.color} size={32} photoUrl={m.avatarUrl} />
             <div className="flex-1 min-w-0">
               <div className={`text-sm font-semibold truncate ${m.active === false ? 'text-[#666] line-through' : 'text-white'}`}>
                 {m.name}
@@ -300,7 +300,7 @@ function MembersContent() {
                   onChange={e => set('color', e.target.value)}
                   className="w-24 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs font-mono focus:outline-none focus:border-[#00ddde]"
                 />
-                <MemberAvatar name={form.name || '?'} color={form.color} size={36} />
+                <MemberAvatar name={form.name || '?'} color={form.color} size={36} photoUrl={profile.photoUrl} />
               </div>
             </Field>
 

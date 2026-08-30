@@ -183,11 +183,13 @@ export function useMembers() {
 export function useMembersWithAccounts() {
   const { data: members = [], loading } = useSubscription(subscribeToBandMembers);
   const { data: authUsers = [] } = useSubscription(subscribeToMembers);
+  const { data: profiles = [] } = useSubscription(subscribeToMemberProfiles);
 
   return useMemo(() => {
     const authByUid = new Map(authUsers.map(u => [u.uid, u]));
-    return { ...buildMemberIndex(members, authByUid), loading, authUsers };
-  }, [members, authUsers, loading]);
+    const profilesById = new Map(profiles.map(p => [p.id, p]));
+    return { ...buildMemberIndex(members, authByUid, profilesById), loading, authUsers };
+  }, [members, authUsers, profiles, loading]);
 }
 
 /** All member profiles, published or not (admin only). */

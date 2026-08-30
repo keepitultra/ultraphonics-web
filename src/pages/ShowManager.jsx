@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
-import { useShows, useSetlists, useClients, useMemberProfiles, useMembers } from '../firebase/useFirestore.js';
+import { useShows, useSetlists, useClients, useMembersWithAccounts } from '../firebase/useFirestore.js';
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import { saveShow, deleteShow, saveSetlist, duplicateSetlist } from '../firestore-service.js';
 import { slugify, makeUniqueSlug } from '../utils.js';
@@ -152,8 +152,7 @@ function ShowManager() {
   const { data: allShows = [] } = useShows();
   const { data: setlists = [] } = useSetlists();
   const { data: clients = [] } = useClients();
-  const memberProfiles = useMemberProfiles();
-  const members = useMembers();
+  const members = useMembersWithAccounts();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const rawShowId = searchParams.get('show') || null;
@@ -432,7 +431,7 @@ function ShowManager() {
                   : { color: '#888', border: '1px solid #2a2a2a' }
                 }
               >
-                <MemberAvatar name={m.name} profiles={memberProfiles} color={color} size={14} />
+                <MemberAvatar name={m.name} photoUrl={m.avatarUrl} color={color} size={14} />
                 {m.name}
               </button>
             );
@@ -479,7 +478,7 @@ function ShowManager() {
                       {s.personnel?.length > 0 && (
                         <div className="flex items-center gap-1 mt-1">
                           {s.personnel.slice(0, 5).map(p => (
-                            <MemberAvatar key={p} name={members.nameOf(p)} profiles={memberProfiles} color={members.colorOf(p)} size={18} />
+                            <MemberAvatar key={p} name={members.nameOf(p)} photoUrl={members.get(p).avatarUrl} color={members.colorOf(p)} size={18} />
                           ))}
                         </div>
                       )}
@@ -538,7 +537,6 @@ function ShowManager() {
                 clients={clients}
                 setlists={setlists}
                 onClientChange={autoFillFromClient}
-                memberProfiles={memberProfiles}
               />
             </div>
           </div>
@@ -555,7 +553,7 @@ function ShowManager() {
               </h2>
               {selectedShow.personnel?.length > 0 && (
                 <div className="flex items-center justify-start gap-1 mt-1.5 flex-wrap">
-                  {selectedShow.personnel.map(p => <MemberAvatar key={p} name={members.nameOf(p)} profiles={memberProfiles} color={members.colorOf(p)} size={24} />)}
+                  {selectedShow.personnel.map(p => <MemberAvatar key={p} name={members.nameOf(p)} photoUrl={members.get(p).avatarUrl} color={members.colorOf(p)} size={24} />)}
                 </div>
               )}
             </div>
@@ -633,7 +631,7 @@ function ShowManager() {
                   </button>
                 )}
               </div>
-              <ShowDetail show={selectedShow} clients={clients} setlists={setlists} memberProfiles={memberProfiles} onPublish={async () => {
+              <ShowDetail show={selectedShow} clients={clients} setlists={setlists} onPublish={async () => {
                 if (!window.confirm('Publish this event on the website?')) return;
                 await saveShow({ ...selectedShow, published: true, updatedAt: new Date().toISOString() });
               }} />
@@ -672,8 +670,8 @@ function EmptyState({ icon, message }) {
 }
 
 // ── Show Detail ────────────────────────────────────────────────────────────
-function ShowDetail({ show, clients, setlists, memberProfiles = {}, onPublish }) {
-  const members = useMembers();
+function ShowDetail({ show, clients, setlists, onPublish }) {
+  const members = useMembersWithAccounts();
   const client = clients.find(c => c.id === show.clientId);
   const setlist = setlists.find(s => s.id === show.setlistId);
 
@@ -726,7 +724,7 @@ function ShowDetail({ show, clients, setlists, memberProfiles = {}, onPublish })
           <div className="flex flex-wrap justify-center gap-2">
             {show.personnel?.map(p => (
               <div key={p} className="flex items-center gap-1.5">
-                <MemberAvatar name={members.nameOf(p)} profiles={memberProfiles} color={members.colorOf(p)} size={28} />
+                <MemberAvatar name={members.nameOf(p)} photoUrl={members.get(p).avatarUrl} color={members.colorOf(p)} size={28} />
                 <span className="text-sm text-[#ccc]">{p}</span>
               </div>
             ))}
@@ -789,8 +787,8 @@ function fromTimeInputValue(val) {
 }
 
 // ── Show Edit Form ─────────────────────────────────────────────────────────
-function ShowEditForm({ form, setField, setFields, clients, setlists, onClientChange, memberProfiles = {} }) {
-  const members = useMembers();
+function ShowEditForm({ form, setField, setFields, clients, setlists, onClientChange }) {
+  const members = useMembersWithAccounts();
   const [guestName, setGuestName] = useState('');
   const [guestInstrument, setGuestInstrument] = useState('Guitar');
   const [addingGuest, setAddingGuest] = useState(false);
@@ -960,7 +958,7 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
                   : { color: '#888', border: '1px solid #2a2a2a' }
                 }
               >
-                <MemberAvatar name={m.name} profiles={memberProfiles} color={color} size={20} />
+                <MemberAvatar name={m.name} photoUrl={m.avatarUrl} color={color} size={20} />
                 {m.name}
               </button>
             );

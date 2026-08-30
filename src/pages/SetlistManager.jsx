@@ -4,7 +4,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import Sortable from 'sortablejs';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
-import { useSetlists, useSetlist, useSongs, useShows, useMemberProfiles, useMembers } from '../firebase/useFirestore.js';
+import { useSetlists, useSetlist, useSongs, useShows, useMembers, useMembersWithAccounts } from '../firebase/useFirestore.js';
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import AutoSetlistModal from '../components/setlist/AutoSetlistModal.jsx';
 import { saveSetlist, deleteSetlist } from '../firestore-service.js';
@@ -108,7 +108,7 @@ function PublicSetlistView({ id }) {
 
 // ── Read-only setlist rows ────────────────────────────────────────────────
 // Shared by the public share link and the admin viewer so the two can't drift.
-function SetlistRows({ songs, songsById, vocalAssignments, segues, profiles = {}, members, linkTo, warnFor }) {
+function SetlistRows({ songs, songsById, vocalAssignments, segues, members, linkTo, warnFor }) {
   const { sets } = buildSetBreakdown(songs, songsById);
   const setByStart = new Map(sets.map(s => [s.start, s]));
 
@@ -154,7 +154,7 @@ function SetlistRows({ songs, songsById, vocalAssignments, segues, profiles = {}
                 <i className="fas fa-triangle-exclamation text-amber-400 text-xs" title="No present singer capable of this song" />
               )}
               {vocalist
-                ? <MemberAvatar name={vocalist.name} profiles={profiles} color={vocalist.color} size={24} />
+                ? <MemberAvatar name={vocalist.name} photoUrl={vocalist.avatarUrl} color={vocalist.color} size={24} />
                 : <span className="w-6" />}
             </div>
           </div>
@@ -171,8 +171,7 @@ function AdminSetlistManager() {
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { data: allSongs = [] } = useSongs();
   const { data: allShows = [] } = useShows();
-  const profiles = useMemberProfiles();
-  const members = useMembers();
+  const members = useMembersWithAccounts();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedId = searchParams.get('id');
@@ -798,7 +797,7 @@ function AdminSetlistManager() {
                     style={{ background: `${m.color}18`, color: m.color, border: `1px solid ${m.color}35` }}
                     title={m.canSingLead ? `${m.name} — can sing lead` : m.name}
                   >
-                    <MemberAvatar name={m.name} profiles={profiles} color={m.color} size={16} />
+                    <MemberAvatar name={m.name} photoUrl={m.avatarUrl} color={m.color} size={16} />
                     {m.name}
                     {m.canSingLead && <i className="fas fa-microphone text-[8px] opacity-70" />}
                   </span>
@@ -849,7 +848,6 @@ function AdminSetlistManager() {
             songsById={songsById}
             vocalAssignments={vocalAssignments}
             segues={segues}
-            profiles={profiles}
             members={members}
             linkTo={song => `/songs?id=${song.id}&back=${encodeURIComponent(`/setlists?id=${selectedId}`)}`}
             warnFor={hasNoAssignmentWarning}
@@ -907,7 +905,7 @@ function AdminSetlistManager() {
                   title={vocalist ? `Vocalist: ${vocalist.name} — tap to change` : 'No vocalist assigned — tap to assign'}
                 >
                   {vocalist ? (
-                    <MemberAvatar name={vocalist.name} profiles={profiles} color={vocalist.color} size={26} />
+                    <MemberAvatar name={vocalist.name} photoUrl={vocalist.avatarUrl} color={vocalist.color} size={26} />
                   ) : (
                     <span className="w-[26px] h-[26px] flex items-center justify-center rounded-full bg-amber-400/15 border border-amber-400/50">
                       <i className="fas fa-triangle-exclamation text-amber-400 text-[10px]" />
@@ -974,7 +972,6 @@ function AdminSetlistManager() {
           song={propsModalSong.song}
           vocalAssignments={vocalAssignments}
           segues={segues}
-          profiles={profiles}
           members={members}
           guestOptions={(linkedShow?.personnel || []).filter(p => members.get(p).type === 'guest')}
           onSaveLocal={(songId, { vocalist, segue }) => {
@@ -1000,7 +997,6 @@ function AdminSetlistManager() {
         <AutoSetlistModal
           songs={allSongs}
           popularity={popularity}
-          profiles={profiles}
           guestOptions={(linkedShow?.personnel || []).filter(p => members.get(p).type === 'guest')}
           showPersonnel={gigPersonnel.map(m => m.id)}
           showLabel={linkedShow ? ([linkedShow.venue, linkedShow.date].filter(Boolean).join(' — ') || 'this gig') : ''}
@@ -1046,7 +1042,7 @@ function TinyBadge({ children, color }) {
 // Capo/tuning are global song properties, edited on the Songs page — this
 // modal only handles what's specific to this one setlist: who's singing it
 // and whether it segues into the next song.
-function SongPropertiesModal({ song, vocalAssignments, segues, guestOptions = [], profiles = {}, members, onSaveLocal, onClose }) {
+function SongPropertiesModal({ song, vocalAssignments, segues, guestOptions = [], members, onSaveLocal, onClose }) {
   // Existing data may hold a legacy name; normalise to an id so selection matches.
   const [vocalist, setVocalist] = useState(
     vocalAssignments[song.id] ? members.idOf(vocalAssignments[song.id]) : '');
@@ -1095,7 +1091,7 @@ function SongPropertiesModal({ song, vocalAssignments, segues, guestOptions = []
                         : { color: '#888', border: '1px solid transparent' }
                       }
                     >
-                      <MemberAvatar name={m.name} profiles={profiles} color={m.color} size={22} />
+                      <MemberAvatar name={m.name} photoUrl={m.avatarUrl} color={m.color} size={22} />
                       {m.name}
                     </button>
                   );

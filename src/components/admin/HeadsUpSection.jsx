@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useMembers } from '../../firebase/useFirestore.js';
+import { useMembersWithAccounts } from '../../firebase/useFirestore.js';
 import { Link } from 'react-router-dom';
 import MemberAvatar from '../MemberAvatar.jsx';
 
@@ -31,8 +31,8 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function HeadsUpSection({ shows, clients, memberProfiles = {}, onTotalCount }) {
-  const members = useMembers();
+export default function HeadsUpSection({ shows, clients, onTotalCount }) {
+  const members = useMembersWithAccounts();
   const [lookaheadWeeks, setLookaheadWeeks] = useState(() => {
     const v = parseInt(localStorage.getItem('hu_lookahead_weeks') || '4');
     return isNaN(v) ? 4 : v;
@@ -206,7 +206,7 @@ export default function HeadsUpSection({ shows, clients, memberProfiles = {}, on
                             border: `1px solid ${color}30`,
                           }}
                         >
-                          <MemberAvatar name={members.nameOf(name)} profiles={memberProfiles} size={14} color={color} />
+                          <MemberAvatar name={members.nameOf(name)} photoUrl={members.get(name).avatarUrl} size={14} color={color} />
                           {members.nameOf(name)}
                         </span>
                       );

@@ -9,6 +9,7 @@
 // the migration safe to run, and safe to roll back.
 
 import { PERSONNEL, PERSONNEL_COLORS, LEAD_VOCALISTS, GUEST_COLOR } from '../constants/band.js';
+import { safeUrl } from './profileThemes.js';
 
 export { GUEST_COLOR };
 
@@ -69,17 +70,23 @@ function unknownMember(key) {
  *
  * @param {Array} members - docs from the `members` collection
  * @param {Map<string,Object>} [authByUid] - allowedUsers docs, for photo/email
+ * @param {Map<string,Object>} [profilesById] - memberProfiles docs, for avatars
  */
-export function buildMemberIndex(members, authByUid = new Map()) {
+export function buildMemberIndex(members, authByUid = new Map(), profilesById = new Map()) {
   const source = (members && members.length) ? members : FALLBACK_MEMBERS;
 
   const all = source
     .map(m => {
       const auth = m.googleUid ? authByUid.get(m.googleUid) : null;
+      const profile = profilesById.get(m.id);
+      // The picture a member chose for their profile page wins over whatever
+      // Google happens to have; the Google photo is only a fallback.
+      const avatarUrl = safeUrl(profile?.photoUrl) || auth?.photoURL || '';
       return {
         ...m,
         roles: m.roles || [],
         photoURL: auth?.photoURL || '',
+        avatarUrl,
         email: auth?.email || '',
         // Linked means a Google account is both chosen AND still authorised.
         linked: !!(m.googleUid && auth),

@@ -3,7 +3,7 @@ import MemberAvatar from '../MemberAvatar.jsx';
 import { GENRE_ORDER, GENRE_COLORS } from '../../utils/genre.js';
 import { generateSetlist } from '../../utils/autoSetlist.js';
 import { formatDuration, formatLongDuration } from '../../utils/setlistUtils.js';
-import { useMembers } from '../../firebase/useFirestore.js';
+import { useMembersWithAccounts } from '../../firebase/useFirestore.js';
 
 const PREFS_KEY = 'ultraphonics.autoSetlist.prefs';
 
@@ -37,8 +37,8 @@ function loadPrefs() {
  * "Use This Setlist" hands rows back to the editor as unsaved changes so the
  * generator can never clobber a saved setlist on its own.
  */
-export default function AutoSetlistModal({ songs, popularity, guestOptions = [], profiles = {}, showPersonnel = [], showLabel = '', onApply, onClose }) {
-  const members = useMembers();
+export default function AutoSetlistModal({ songs, popularity, guestOptions = [], showPersonnel = [], showLabel = '', onApply, onClose }) {
+  const members = useMembersWithAccounts();
   const [prefs, setPrefs] = useState(loadPrefs);
 
   // Prefill from whoever is actually on the gig. Only people who can sing lead
@@ -147,14 +147,13 @@ export default function AutoSetlistModal({ songs, popularity, guestOptions = [],
                 prefilledFromGig={prefilledFromGig}
                 showLabel={showLabel}
                 set={set}
-                profiles={profiles}
                 singerOptions={singerOptions}
                 guestOptions={guestOptions}
                 toggleSinger={toggleSinger}
                 cycleGenre={cycleGenre}
                 stats={result.stats}
               />
-            : <PreviewPane result={result} profiles={profiles} members={members} />}
+            : <PreviewPane result={result} members={members} />}
         </div>
 
         {/* Footer */}
@@ -211,7 +210,7 @@ export default function AutoSetlistModal({ songs, popularity, guestOptions = [],
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────
-function SettingsPane({ prefs, set, profiles, singerOptions, guestOptions, toggleSinger, cycleGenre, stats, members, selectedSingers, prefilledFromGig, showLabel }) {
+function SettingsPane({ prefs, set, singerOptions, guestOptions, toggleSinger, cycleGenre, stats, members, selectedSingers, prefilledFromGig, showLabel }) {
   return (
     <div className="p-5 space-y-6">
       {/* Singers */}
@@ -231,7 +230,7 @@ function SettingsPane({ prefs, set, profiles, singerOptions, guestOptions, toggl
                   ? { background: `${color}25`, color, border: `1px solid ${color}70` }
                   : { color: '#777', border: '1px solid #2a2a2a', background: '#121212' }}
               >
-                <MemberAvatar name={name} profiles={profiles} color={color} size={24} />
+                <MemberAvatar name={name} photoUrl={m.avatarUrl} color={color} size={24} />
                 {name}
                 {on && <i className="fas fa-check text-[10px]" />}
               </button>
@@ -350,7 +349,7 @@ function SettingsPane({ prefs, set, profiles, singerOptions, guestOptions, toggl
 }
 
 // ── Preview ───────────────────────────────────────────────────────────────
-function PreviewPane({ result, profiles, members }) {
+function PreviewPane({ result, members }) {
   const { sets, warnings, stats } = result;
 
   return (
@@ -378,7 +377,7 @@ function PreviewPane({ result, profiles, members }) {
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold"
               style={{ background: `${color}18`, color, border: `1px solid ${color}35` }}
             >
-              <MemberAvatar name={name} profiles={profiles} color={color} size={18} />
+              <MemberAvatar name={name} photoUrl={m.avatarUrl} color={color} size={18} />
               {n} song{n !== 1 ? 's' : ''}
             </span>
           );
@@ -408,7 +407,7 @@ function PreviewPane({ result, profiles, members }) {
                 </span>
                 <span className="shrink-0 text-[10px] text-[#666] font-mono w-9 text-right">{formatDuration(song.seconds)}</span>
                 {singer
-                  ? <MemberAvatar name={singer.name} profiles={profiles} color={singer.color} size={22} />
+                  ? <MemberAvatar name={singer.name} photoUrl={singer.avatarUrl} color={singer.color} size={22} />
                   : <i className="fas fa-triangle-exclamation text-amber-400 text-xs w-[22px] text-center" title="No singer available" />}
               </div>
             );

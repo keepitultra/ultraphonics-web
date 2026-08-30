@@ -1,8 +1,14 @@
+import { safeUrl } from '../utils/profileThemes.js';
+
 /**
- * MemberAvatar — shows a member's Google profile photo if available,
- * falls back to a colored initial bubble. Pass `profiles` from useMemberProfiles().
+ * MemberAvatar — a member's picture, falling back to a coloured initial.
+ *
+ * Prefer passing `photoUrl` (a member's `avatarUrl` from useMembersWithAccounts),
+ * which is the picture they chose for their profile page. The older `profiles`
+ * lookup is a fallback for call sites that only have a first name.
  *
  * Props:
+ *   photoUrl  — the member's own picture; wins over `profiles`
  *   name      — member first name (must match a key in `profiles`)
  *   profiles  — map from useMemberProfiles(): { [firstName]: { photoURL, displayName } }
  *   size      — pixel size of the circle (default 28)
@@ -10,9 +16,8 @@
  *   className — extra classes
  *   title     — tooltip override (defaults to name)
  */
-export default function MemberAvatar({ name, profiles = {}, size = 28, color = '#888', className = '', title }) {
-  const profile = profiles[name];
-  const photoURL = profile?.photoURL;
+export default function MemberAvatar({ name, profiles = {}, photoUrl, size = 28, color = '#888', className = '', title }) {
+  const photoURL = safeUrl(photoUrl) || profiles[name]?.photoURL;
   const label = title ?? name;
 
   if (photoURL) {

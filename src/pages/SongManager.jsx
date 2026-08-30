@@ -6,7 +6,7 @@ import { useAuth } from '../firebase/AuthContext.jsx';
 import { useSongs } from '../firebase/useFirestore.js';
 import { getSongs, saveSong, deleteSong, syncSongsBatch } from '../firestore-service.js';
 import { parseSongData } from '../utils/lyricParser.ts';
-import { useMembers } from '../firebase/useFirestore.js';
+import { useMembersWithAccounts } from '../firebase/useFirestore.js';
 import { formatDuration, parseDurationInput } from '../utils/setlistUtils.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -327,7 +327,7 @@ export default function SongManager() {
 function SongManagerInner() {
   const { user } = useAuth();
   const { data: songs = [] } = useSongs();
-  const members = useMembers();
+  const members = useMembersWithAccounts();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
