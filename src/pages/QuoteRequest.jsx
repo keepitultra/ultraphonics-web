@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { config } from '../config.js';
+import { createQuoteRequest } from '../firestore-service.js';
+import { serializeQuoteForm, withTimeout } from '../utils/quoteForm.js';
 
 const { emailjs: ejs } = config.ids;
 const TOTAL_STEPS = 5;
@@ -12,6 +14,9 @@ export default function QuoteRequest() {
   const [status, setStatus] = useState({ text: '', color: '' });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // Set once the lead is safely in Firestore, so a retry after an email-only
+  // failure re-sends against the existing quote instead of creating a second one.
+  const savedQuoteIdRef = useRef(null);
   const [searchParams] = useSearchParams();
 
   // Auto-select event type from URL param
@@ -75,26 +80,67 @@ export default function QuoteRequest() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!window.emailjs) {
-      setStatus({ text: 'Error: EmailJS not configured.', color: 'red' });
-      return;
-    }
+    if (submitting) return;
+    // Every step lives in the DOM at once (styles.css hides the inactive ones),
+    // so Enter in a step-1 text field can fire submit from anywhere.
+    if (step !== TOTAL_STEPS) return;
+
     setSubmitting(true);
     setStatus({ text: '', color: '' });
+
+    const form = formRef.current;
+    const fields = serializeQuoteForm(form);
+
+    // 1. Persist first. This is the record of the lead; the email is only a
+    //    notification, and EmailJS has dropped leads before. Timeout-raced so a
+    //    stalled write can never stop the email from going out.
+    let quoteId = savedQuoteIdRef.current;
+    if (!quoteId) {
+      try {
+        quoteId = await withTimeout(createQuoteRequest(fields), 6000);
+        savedQuoteIdRef.current = quoteId;
+      } catch (err) {
+        console.error('Quote save failed:', err);
+      }
+    }
+
+    // 2. Hand the id and deep link to the email template. Assigned imperatively
+    //    because sendForm() reads the live DOM — a React state update would not
+    //    have flushed by now, and the email would ship with an empty link.
+    if (form.elements.quote_id) form.elements.quote_id.value = quoteId || '';
+    if (form.elements.admin_link) {
+      form.elements.admin_link.value = quoteId
+        ? `${window.location.origin}/quotes?id=${quoteId}`
+        : '';
+    }
+
+    // 3. Notify.
+    let emailed = false;
     try {
-      await window.emailjs.sendForm(ejs.serviceId, ejs.quoteTemplateId, formRef.current);
+      if (window.emailjs) {
+        await window.emailjs.sendForm(ejs.serviceId, ejs.quoteTemplateId, form);
+        emailed = true;
+      }
+    } catch (err) {
+      console.error('EmailJS error:', err);
+    }
+
+    // 4. Either channel landing means we have the lead. Showing an error when
+    //    only one failed would push the visitor into submitting a duplicate.
+    if (quoteId || emailed) {
+      form.reset();
+      setSubmitted(true);
       setStatus({
         text: 'Thank you! We have received your inquiry and will be in touch shortly.',
         color: 'var(--color-accent)',
       });
-      formRef.current.reset();
-      setSubmitted(true);
-    } catch (err) {
-      console.error('EmailJS error:', err);
-      setStatus({ text: 'Oops! There was a problem submitting your form.', color: 'red' });
-    } finally {
-      setSubmitting(false);
+    } else {
+      setStatus({
+        text: "Sorry — we couldn't send that. Please email info@ultraphonicsmusic.com, or try again.",
+        color: 'red',
+      });
     }
+    setSubmitting(false);
   }
 
   return (
@@ -395,6 +441,13 @@ export default function QuoteRequest() {
               {status.text}
             </p>
           )}
+
+          {/* Carried into the EmailJS template. Uncontrolled and assigned
+              imperatively in handleSubmit — sendForm() reads the live DOM, and a
+              React state update would not be flushed in time, so the email would
+              ship with an empty link. */}
+          <input type="hidden" name="quote_id" defaultValue="" />
+          <input type="hidden" name="admin_link" defaultValue="" />
         </form>
       </div>
     </main>

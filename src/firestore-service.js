@@ -16,7 +16,8 @@ import {
   onSnapshot,
   writeBatch,
   addDoc,
-  deleteField
+  deleteField,
+  serverTimestamp
 } from 'firebase/firestore';
 
 // Collection names
@@ -300,6 +301,20 @@ export async function saveClient(client) {
       .filter(([, v]) => v !== undefined)
   );
   await setDoc(docRef, cleaned);
+}
+
+/**
+ * Patch specific fields on a client.
+ *
+ * saveClient() is a full overwrite, so using it to merge a quote's details into
+ * an existing client would silently clobber any field the caller's snapshot did
+ * not carry. Use this whenever the intent is "fill in the blanks".
+ */
+export async function updateClient(clientId, patch) {
+  await updateDoc(doc(db, COLLECTIONS.CLIENTS, clientId), {
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 /**
@@ -634,42 +649,6 @@ export async function updateSettings(patch) {
   await setDoc(docRef, { ...patch, updatedAt: new Date().toISOString() }, { merge: true });
 }
 
-// ============= QUOTES =============
-
-/**
- * Get all quotes
- * @returns {Promise<Array>}
- */
-export async function getQuotes() {
-  const snapshot = await getDocs(collection(db, COLLECTIONS.QUOTES));
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-}
-
-/**
- * Get a single quote by ID
- * @param {string} quoteId
- * @returns {Promise<Object|null>}
- */
-export async function getQuote(quoteId) {
-  const docRef = doc(db, COLLECTIONS.QUOTES, quoteId);
-  const snapshot = await getDoc(docRef);
-  if (!snapshot.exists()) return null;
-  return { id: snapshot.id, ...snapshot.data() };
-}
-
-/**
- * Save a quote
- * @param {Object} quote
- * @returns {Promise<void>}
- */
-export async function saveQuote(quote) {
-  const docRef = doc(db, COLLECTIONS.QUOTES, quote.id);
-  await setDoc(docRef, {
-    ...quote,
-    updatedAt: new Date().toISOString()
-  });
-}
-
 /**
  * Subscribe to all allowedUsers member profiles with real-time updates.
  * Each doc contains { firstName, displayName, photoURL, email }
@@ -684,6 +663,78 @@ export function subscribeToMembers(callback, onError) {
     onError
   );
 }
+
+// ============= QUOTES =============
+
+/**
+ * Create a quote request from the public form.
+ *
+ * Called UNAUTHENTICATED from /quote, so the document must satisfy the create
+ * rule exactly: every key present, status 'New', source 'web', and a
+ * server-set receivedAt. The id is generated locally so the notification email
+ * can carry a /quotes?id=... deep link before the write even lands.
+ *
+ * @param {Object} fields - output of serializeQuoteForm()
+ * @returns {Promise<string>} the new quote id
+ */
+export async function createQuoteRequest(fields) {
+  const ref = doc(collection(db, COLLECTIONS.QUOTES)); // auto-id, no write yet
+  await setDoc(ref, {
+    ...fields,
+    id: ref.id,
+    status: 'New',
+    source: 'web',
+    createdAt: new Date().toISOString(),
+    // The trustworthy sort key: the rule pins this to request.time, so the
+    // inbox order cannot be gamed by lying about createdAt.
+    receivedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+/**
+ * Get a single quote. Used as the pre-write guard when converting, since a
+ * live snapshot is not transactional.
+ */
+export async function getQuote(quoteId) {
+  const snapshot = await getDoc(doc(db, COLLECTIONS.QUOTES, quoteId));
+  return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+}
+
+/** Newest first, by the server-set timestamp. */
+export function subscribeToQuotes(callback, onError) {
+  return onSnapshot(
+    query(collection(db, COLLECTIONS.QUOTES), orderBy('receivedAt', 'desc')),
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/** Patch a quote. Never a full overwrite - see saveClient for what that costs. */
+export async function updateQuote(quoteId, patch) {
+  await updateDoc(doc(db, COLLECTIONS.QUOTES, quoteId), {
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function updateQuoteStatus(quoteId, status, user) {
+  await updateQuote(quoteId, {
+    status,
+    statusUpdatedAt: new Date().toISOString(),
+    statusUpdatedBy: user?.displayName || 'Admin',
+  });
+}
+
+/** Record which CRM client this lead became. Written only AFTER the client exists. */
+export async function linkQuoteToClient(quoteId, clientId, user) {
+  await updateQuote(quoteId, {
+    convertedClientId: clientId,
+    convertedAt: new Date().toISOString(),
+    convertedBy: user?.displayName || 'Admin',
+  });
+}
+
 
 // ============= SONG REQUESTS =============
 

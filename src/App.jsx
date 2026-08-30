@@ -25,10 +25,11 @@ import ClientManager from './pages/ClientManager.jsx';
 import ShowManager from './pages/ShowManager.jsx';
 import SongRequestsManager from './pages/SongRequestsManager.jsx';
 import MemberManager from './pages/MemberManager.jsx';
+import QuoteManager from './pages/QuoteManager.jsx';
 import BandIndex from './pages/BandIndex.jsx';
 import MemberProfile from './pages/MemberProfile.jsx';
 
-const APP_ROUTES = ['/setlists', '/songs', '/clients', '/shows', '/events', '/requests', '/request', '/members'];
+const APP_ROUTES = ['/setlists', '/songs', '/clients', '/shows', '/events', '/requests', '/request', '/members', '/quotes'];
 
 function PublicLayout() {
   const { pathname } = useLocation();
@@ -69,6 +70,7 @@ function PublicLayout() {
         <Route path="/clients" element={<AdminDrawerProvider><ClientManager /></AdminDrawerProvider>} />
         <Route path="/shows" element={<AdminDrawerProvider><ShowManager /></AdminDrawerProvider>} />
         <Route path="/members" element={<AdminDrawerProvider><MemberManager /></AdminDrawerProvider>} />
+        <Route path="/quotes" element={<AdminDrawerProvider><QuoteManager /></AdminDrawerProvider>} />
         <Route path="/requests" element={<AdminDrawerProvider><SongRequestsManager /></AdminDrawerProvider>} />
       </Routes>
       {!hideChrome && <Footer />}

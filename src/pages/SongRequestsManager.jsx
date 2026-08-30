@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import { subscribeToSongRequests, dismissSongRequest } from '../firestore-service.js';
+import { playChime } from '../utils/chime.js';
 
 // Matches the 'requests' entry in AdminShell's APPS table
 const REQUESTS_ACCENT = '#f59e0b';
@@ -24,26 +25,6 @@ function useWakeLock() {
       lock?.release();
     };
   }, []);
-}
-
-// Simple ascending C-E-G chime via Web Audio API
-function playChime() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [523.25, 659.25, 783.99].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = freq;
-      osc.type = 'sine';
-      const t = ctx.currentTime + i * 0.15;
-      gain.gain.setValueAtTime(0.3, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-      osc.start(t);
-      osc.stop(t + 0.5);
-    });
-  } catch {}
 }
 
 function formatTime(iso) {

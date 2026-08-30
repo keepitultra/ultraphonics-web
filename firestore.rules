@@ -76,9 +76,69 @@ service cloud.firestore {
       }
     }
 
-    // Quotes: allowlisted read/write only
+    // ── Quote requests ──────────────────────────────────────────────────
+    // The public /quote form writes these while signed out, so `create` is the
+    // one door an anonymous visitor gets. Unlike songRequests below it is not
+    // simply propped open: an exact key set (nothing extra can be smuggled in),
+    // capped string lengths, closed option lists, and status pinned to 'New' so
+    // nobody can post a pre-'Won' lead. receivedAt must equal server time, so
+    // the admin list's sort order cannot be gamed by lying about createdAt.
+    //
+    // Reads stay allowlisted — a quote holds a name, email and phone number, so
+    // an anonymous get or list must never resolve.
+    //
+    // These option lists MUST stay in step with QUOTE_OPTIONS in
+    // src/utils/quoteForm.js, which is what renders the form. Adding an option
+    // there without redeploying rules silently rejects every submission using it.
+    function quoteKeys() {
+      return [
+        'id','name','email','phone','eventType','eventTypeOther','date','location',
+        'venue','setting','guests','duration','hardStop','bandSize','openToRec',
+        'services','genres','sound','lighting','budget','urgency','notes',
+        'status','createdAt','receivedAt','source',
+        'utmSource','utmMedium','utmCampaign','referrer'
+      ];
+    }
+    function qStr(v, max)           { return v is string && v.size() <= max; }
+    function qOpt(v, options)       { return v is string && (v == '' || v in options); }
+    function qList(v, options, max) { return v is list && v.size() <= max && v.toSet().hasOnly(options); }
+
+    function isValidNewQuote(quoteId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(quoteKeys()) && d.keys().hasAll(quoteKeys())
+        && d.id == quoteId
+        && d.status == 'New'
+        && d.source == 'web'
+        && d.receivedAt == request.time
+        && qStr(d.createdAt, 40)
+        && qStr(d.name, 120)     && d.name.size() > 0
+        && qStr(d.email, 200)    && d.email.matches('^[^@\\s]+@[^@\\s]+$')
+        && qStr(d.location, 200) && d.location.size() > 0
+        && qStr(d.date, 12)      && d.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && d.eventType in ['Wedding','Corporate','Private Party','Festival','Other']
+        && qStr(d.phone, 40)
+        && qStr(d.eventTypeOther, 120)
+        && qStr(d.venue, 200)
+        && qStr(d.notes, 2000)
+        && qStr(d.referrer, 300)
+        && qStr(d.utmSource, 100) && qStr(d.utmMedium, 100) && qStr(d.utmCampaign, 120)
+        && qOpt(d.setting,  ['Indoor','Outdoor','Both'])
+        && qOpt(d.guests,   ['Under 50','50-100','100-200','200+'])
+        && qOpt(d.duration, ['1-2 hrs','3-4 hrs','4-5 hrs','5+ hrs'])
+        && qOpt(d.hardStop, ['No','Yes','Unsure'])
+        && qOpt(d.bandSize, ['Solo/Duo','Small (3-4)','Medium (5-6)','Large (7+)'])
+        && qOpt(d.sound,    ['Band Provides','Venue Provides','Unsure'])
+        && qOpt(d.lighting, ['Basic','Enhanced','None'])
+        && qOpt(d.budget,   ['Under $2k','$2k-$4k','$4k-$6k','$6k+','Prefer not to say'])
+        && qOpt(d.urgency,  ['Information Gathering','Ready to Book','Immediate'])
+        && d.openToRec is bool
+        && qList(d.services, ['Live Band','Cocktail Hour','Ceremony','MC Services'], 4)
+        && qList(d.genres,   ['Rock','Pop','Motown','Country','90s'], 5);
+    }
+
     match /quotes/{quoteId} {
-      allow read, write: if isAllowedUser();
+      allow create: if isValidNewQuote(quoteId);
+      allow read, update, delete: if isAllowedUser();
     }
 
     // Band members: public read (the shared setlist view needs names/colours),

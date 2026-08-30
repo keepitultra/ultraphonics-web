@@ -20,6 +20,7 @@ import {
   subscribeToMemberProfiles,
   subscribeToPublishedProfiles,
   isUserAdmin,
+  subscribeToQuotes,
 } from '../firestore-service.js';
 
 // ── Generic real-time subscription hook ─────────────────────
@@ -233,4 +234,14 @@ export function useIsAdmin() {
   }, [user?.uid]);
 
   return { isAdmin, loading };
+}
+
+/**
+ * Real-time quote leads, newest first (admin only).
+ *
+ * Never call from a public page — the quotes rule denies anonymous reads, so an
+ * anonymous mount produces a permission error rather than an empty list.
+ */
+export function useQuotes() {
+  return useSubscription(subscribeToQuotes);
 }
