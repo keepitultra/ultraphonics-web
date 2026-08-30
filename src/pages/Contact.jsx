@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { config } from '../config.js';
 
 const { emailjs: ejs } = config.ids;
 
 export default function Contact() {
   const formRef = useRef(null);
+  const navigate = useNavigate();
   const [status, setStatus] = useState({ text: '', type: '' });
   const [submitting, setSubmitting] = useState(false);
 
@@ -30,9 +31,12 @@ export default function Contact() {
     setSubmitting(true);
     setStatus({ text: '', type: '' });
     try {
+      const visitorName = formRef.current.elements.name?.value || '';
       await window.emailjs.sendForm(ejs.serviceId, ejs.contactTemplateId, formRef.current);
-      setStatus({ text: "Thanks! We've received your message and will follow up soon.", type: 'success' });
       formRef.current.reset();
+      // replace, so Back does not return to a spent form that looks resubmittable.
+      navigate('/thank-you?from=contact', { replace: true, state: { name: visitorName } });
+      return;
     } catch (err) {
       console.error('EmailJS error:', err);
       setStatus({ text: 'Oops! There was a problem. Please try again or email us directly.', type: 'error' });

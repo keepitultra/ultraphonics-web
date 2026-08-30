@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { config } from '../config.js';
 import { createQuoteRequest } from '../firestore-service.js';
 import { serializeQuoteForm, withTimeout } from '../utils/quoteForm.js';
@@ -18,6 +18,7 @@ export default function QuoteRequest() {
   // failure re-sends against the existing quote instead of creating a second one.
   const savedQuoteIdRef = useRef(null);
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Auto-select event type from URL param
   useEffect(() => {
@@ -128,12 +129,12 @@ export default function QuoteRequest() {
     // 4. Either channel landing means we have the lead. Showing an error when
     //    only one failed would push the visitor into submitting a duplicate.
     if (quoteId || emailed) {
+      const visitorName = fields.name;
       form.reset();
       setSubmitted(true);
-      setStatus({
-        text: 'Thank you! We have received your inquiry and will be in touch shortly.',
-        color: 'var(--color-accent)',
-      });
+      // replace, so Back does not return to a spent form that looks resubmittable.
+      navigate('/thank-you?from=quote', { replace: true, state: { name: visitorName } });
+      return;
     } else {
       setStatus({
         text: "Sorry — we couldn't send that. Please email info@ultraphonicsmusic.com, or try again.",

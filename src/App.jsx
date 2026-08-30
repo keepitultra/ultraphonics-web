@@ -26,6 +26,7 @@ import ShowManager from './pages/ShowManager.jsx';
 import SongRequestsManager from './pages/SongRequestsManager.jsx';
 import MemberManager from './pages/MemberManager.jsx';
 import QuoteManager from './pages/QuoteManager.jsx';
+import ThankYou from './pages/ThankYou.jsx';
 import BandIndex from './pages/BandIndex.jsx';
 import MemberProfile from './pages/MemberProfile.jsx';
 
@@ -63,6 +64,7 @@ function PublicLayout() {
         <Route path="/request" element={<SongRequest />} />
         <Route path="/band" element={<BandIndex />} />
         <Route path="/band/:memberId" element={<MemberProfile />} />
+        <Route path="/thank-you" element={<ThankYou />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/admin/*" element={<AdminRouter />} />
         <Route path="/setlists" element={<AdminDrawerProvider><SetlistManager /></AdminDrawerProvider>} />
