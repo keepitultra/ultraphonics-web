@@ -21,6 +21,9 @@ import {
   subscribeToPublishedProfiles,
   isUserAdmin,
   subscribeToQuotes,
+  subscribeToAvailabilityRange,
+  subscribeToAvailabilityMonth,
+  subscribeToBandEvents,
 } from '../firestore-service.js';
 
 // ── Generic real-time subscription hook ─────────────────────
@@ -244,4 +247,40 @@ export function useIsAdmin() {
  */
 export function useQuotes() {
   return useSubscription(subscribeToQuotes);
+}
+
+/**
+ * Real-time availability docs (all members) whose month falls in
+ * [startMonth, endMonth] inclusive ('YYYY-MM' strings).
+ *
+ * Pass stable, monotonically-widening bounds — a new subscription is opened
+ * on every change, so re-narrowing the range on scroll-back would thrash.
+ * Filter by member client-side; a memberId + month query needs a composite
+ * index this repo doesn't ship (see firestore-service.js).
+ */
+export function useAvailability(startMonth, endMonth) {
+  return useSubscription(
+    (cb, onError) => subscribeToAvailabilityRange(startMonth, endMonth, cb, onError),
+    [startMonth, endMonth],
+  );
+}
+
+/**
+ * Real-time availability docs (all members) for a single month.
+ * Use this, not useAvailability(), when only one date matters (e.g. a
+ * quote's event date) — pulling a year of docs to answer one date is wasteful.
+ */
+export function useAvailabilityMonth(month) {
+  return useSubscription(
+    (cb, onError) => subscribeToAvailabilityMonth(month, cb, onError),
+    [month],
+  );
+}
+
+/**
+ * Real-time band events (rehearsals, holds, deadlines, blackouts).
+ * Whole-collection, not range-queried — see subscribeToBandEvents for why.
+ */
+export function useBandEvents() {
+  return useSubscription(subscribeToBandEvents);
 }

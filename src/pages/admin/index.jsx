@@ -201,6 +201,13 @@ function AdminDashboard() {
                 subtitle="Manage upcoming & past shows"
               />
               <AppTile
+                to="/calendar"
+                color="#14b8a6"
+                icon={<i className="fas fa-calendar-check" />}
+                title="Band Calendar"
+                subtitle="Availability, shows & holds"
+              />
+              <AppTile
                 to="/quotes"
                 color="#ec4899"
                 icon={<i className="fas fa-file-invoice-dollar" />}

@@ -19,6 +19,8 @@ import {
   deleteField,
   serverTimestamp
 } from 'firebase/firestore';
+import { parseLocalDateOnly } from './utils.js';
+import { eachDateKey, monthOf } from './utils/availability.js';
 
 // Collection names
 const COLLECTIONS = {
@@ -30,7 +32,9 @@ const COLLECTIONS = {
   SONG_REQUESTS: 'songRequests',
   SETTINGS: 'settings',
   MEMBERS: 'members',
-  MEMBER_PROFILES: 'memberProfiles'
+  MEMBER_PROFILES: 'memberProfiles',
+  AVAILABILITY: 'availability',
+  BAND_EVENTS: 'bandEvents'
 };
 
 // Site-wide settings live in a single document so the public pages need exactly
@@ -773,6 +777,155 @@ export async function dismissSongRequest(id) {
     dismissed: true,
     dismissedAt: new Date().toISOString()
   });
+}
+
+// ============= BAND AVAILABILITY =============
+//
+// One document per member per month: availability/{memberId}__{YYYY-MM}.
+// `manual` (member-set) always wins over `synced` (from Google free/busy);
+// both maps store only non-default days. See src/utils/availability.js for
+// how a day's effective state is resolved, and firestore.rules for why the
+// doc id encodes memberId + month rather than being free-form.
+//
+// Reads a whole month range at once rather than filtering by memberId in the
+// query, on purpose: a compound range+equality query needs a composite index,
+// and this repo ships without firestore.indexes.json. Filter by member
+// client-side instead.
+
+function availabilityDocId(memberId, month) {
+  return `${memberId}__${month}`;
+}
+
+/**
+ * Subscribe to every member's availability docs whose month falls in
+ * [startMonth, endMonth] (inclusive, 'YYYY-MM' strings).
+ * @returns {Function} Unsubscribe function
+ */
+export function subscribeToAvailabilityRange(startMonth, endMonth, callback, onError) {
+  const q = query(
+    collection(db, COLLECTIONS.AVAILABILITY),
+    where('month', '>=', startMonth),
+    where('month', '<=', endMonth),
+  );
+  return onSnapshot(
+    q,
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Subscribe to every member's availability doc for a single month.
+ * Used where a component only needs one date's picture (e.g. a quote's
+ * event date) and pulling a whole year would be wasteful.
+ * @returns {Function} Unsubscribe function
+ */
+export function subscribeToAvailabilityMonth(month, callback, onError) {
+  const q = query(collection(db, COLLECTIONS.AVAILABILITY), where('month', '==', month));
+  return onSnapshot(
+    q,
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Mark (or clear) a member's manual availability across an inclusive date
+ * range in one atomic batch, one write per month touched.
+ *
+ * @param {string} memberId
+ * @param {string} startKey 'YYYY-MM-DD' inclusive
+ * @param {string} endKey 'YYYY-MM-DD' inclusive
+ * @param {'available'|'maybe'|'unavailable'|null} state  null clears the manual override for each day
+ * @param {{ weekdays?: number[] }} [opts]  restrict to these getDay() values (0=Sun..6=Sat)
+ * @returns {Promise<void>}
+ */
+export async function markAvailabilityRange(memberId, startKey, endKey, state, opts = {}) {
+  const byMonth = new Map(); // month -> { [dateKey]: value }
+  let dayCount = 0;
+  for (const key of eachDateKey(startKey, endKey)) {
+    dayCount++;
+    if (dayCount > 400) throw new Error('Range too large — mark at most ~13 months at once.');
+    if (opts.weekdays && !opts.weekdays.includes(parseLocalDateOnly(key).getDay())) continue;
+    const month = monthOf(key);
+    if (!byMonth.has(month)) byMonth.set(month, {});
+    byMonth.get(month)[key] = state === null ? deleteField() : state;
+  }
+
+  const batch = writeBatch(db);
+  const now = new Date().toISOString();
+  for (const [month, manual] of byMonth) {
+    const id = availabilityDocId(memberId, month);
+    batch.set(
+      doc(db, COLLECTIONS.AVAILABILITY, id),
+      { id, memberId, month, manual, updatedAt: now },
+      { merge: true },
+    );
+  }
+  await batch.commit();
+}
+
+/**
+ * Write a month's synced (Google free/busy derived) states, pruning any day
+ * that was synced last time but isn't in `nextSynced` this time — otherwise a
+ * deleted Google event would leave a permanently-stale red day.
+ *
+ * @param {string} memberId
+ * @param {string} month 'YYYY-MM'
+ * @param {Record<string,'maybe'|'unavailable'>} nextSynced
+ * @param {Record<string,string>} [prevSynced]  the synced map from the live snapshot, for pruning
+ * @param {string} [tz]  IANA timezone the sync ran in, for debugging
+ * @returns {Promise<void>}
+ */
+export async function saveSyncedMonth(memberId, month, nextSynced, prevSynced = {}, tz) {
+  const synced = { ...nextSynced };
+  for (const key of Object.keys(prevSynced)) {
+    if (!(key in nextSynced)) synced[key] = deleteField();
+  }
+  const now = new Date().toISOString();
+  const id = availabilityDocId(memberId, month);
+  await setDoc(
+    doc(db, COLLECTIONS.AVAILABILITY, id),
+    { id, memberId, month, synced, syncedAt: now, syncedTz: tz || '', updatedAt: now },
+    { merge: true },
+  );
+}
+
+// ============= BAND EVENTS =============
+//
+// Rehearsals, holds, deadlines, blackouts — shared band-operational records,
+// not per-person claims, so unlike availability any allowlisted user may
+// create/edit/delete them (same posture as shows and setlists).
+
+/**
+ * Subscribe to the whole bandEvents collection (dozens of docs at most).
+ * Deliberately not range-queried: a date-range query would silently drop
+ * multi-day events that start before the visible window.
+ * @returns {Function} Unsubscribe function
+ */
+export function subscribeToBandEvents(callback, onError) {
+  return onSnapshot(
+    collection(db, COLLECTIONS.BAND_EVENTS),
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Save a band event (create or update, full overwrite of the given fields).
+ * @param {Object} event - must include `id` for an update; auto-id on create
+ * @returns {Promise<string>} the event id
+ */
+export async function saveBandEvent(event) {
+  const id = event.id || doc(collection(db, COLLECTIONS.BAND_EVENTS)).id;
+  const now = new Date().toISOString();
+  const docRef = doc(db, COLLECTIONS.BAND_EVENTS, id);
+  await setDoc(docRef, { ...event, id, updatedAt: now, createdAt: event.createdAt || now });
+  return id;
+}
+
+export async function deleteBandEvent(eventId) {
+  await deleteDoc(doc(db, COLLECTIONS.BAND_EVENTS, eventId));
 }
 
 export { db, COLLECTIONS };

@@ -182,6 +182,58 @@ service cloud.firestore {
       allow write: if isAdmin() || (isAllowedUser() && ownsMember(memberId));
     }
 
+    // ── Band availability ────────────────────────────────────────────────
+    // One doc per member per month: availability/{memberId}__{YYYY-MM}. The
+    // doc id is the authorisation key, not decoration — re-deriving it from
+    // the payload is what stops a member writing into someone else's month.
+    // Every allowlisted user READS everyone (that's the point of a shared
+    // calendar); only the owning member — or an admin — writes. The owner
+    // writes `synced` too, since the Google sync runs in their own browser
+    // with their own token. Event titles are never stored, only a 3-state
+    // colour per day.
+    function availValuesOk(m) {
+      return m.keys().size() <= 31
+        && m.values().toSet().hasOnly(['available', 'maybe', 'unavailable']);
+    }
+
+    function isValidAvailability(docId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['id', 'memberId', 'month', 'manual', 'synced', 'syncedAt', 'syncedTz', 'updatedAt'])
+        && d.id == docId
+        && d.memberId is string && d.memberId.size() > 0 && d.memberId.size() <= 60
+        && d.month is string && d.month.matches('^\\d{4}-\\d{2}$')
+        && docId == d.memberId + '__' + d.month
+        && (!('manual' in d) || availValuesOk(d.manual))
+        && (!('synced' in d) || availValuesOk(d.synced));
+    }
+
+    match /availability/{docId} {
+      allow read: if isAllowedUser();
+
+      // `resource` is null on create, so identity comes only from the payload.
+      // On update it must ALSO match what's already stored, or a member could
+      // rewrite memberId and take over someone else's document.
+      allow create: if isAllowedUser() && isValidAvailability(docId)
+        && (isAdmin() || ownsMember(request.resource.data.memberId));
+      allow update: if isAllowedUser() && isValidAvailability(docId)
+        && request.resource.data.memberId == resource.data.memberId
+        && request.resource.data.month == resource.data.month
+        && (isAdmin() || ownsMember(resource.data.memberId));
+      allow delete: if isAdmin();
+    }
+
+    // ── Band events (rehearsals, holds, deadlines, blackouts) ─────────────
+    // Deliberately looser than availability: shared band-operational records,
+    // not per-person claims — same posture as shows and setlists.
+    match /bandEvents/{eventId} {
+      allow read: if isAllowedUser();
+      allow create, update: if isAllowedUser()
+        && request.resource.data.id == eventId
+        && request.resource.data.type in ['rehearsal', 'hold', 'deadline', 'blackout']
+        && request.resource.data.date.matches('^\\d{4}-\\d{2}-\\d{2}$');
+      allow delete: if isAllowedUser();
+    }
+
     // Site settings: public read (the homepage and /request page gate on these),
     // allowlisted write. Single doc: settings/global
     match /settings/{docId} {

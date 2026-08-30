@@ -13,6 +13,7 @@ import {
   quoteToClient, buildQuoteLogContent, quoteKind,
 } from '../utils/quoteForm.js';
 import { playChime } from '../utils/chime.js';
+import AvailabilityStrip from '../components/calendar/AvailabilityStrip.jsx';
 
 const ACCENT = '#ec4899';
 const INPUT = 'w-full px-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#ec4899]';
@@ -409,6 +410,15 @@ function QuoteManager() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 max-w-2xl">
+            {!isContact && /^\d{4}-\d{2}-\d{2}$/.test(quote.date) && (
+              <AvailabilityStrip
+                date={quote.date}
+                quoteId={quote.id}
+                quoteName={quote.name}
+                accent={ACCENT}
+                createdBy={user?.displayName || 'Admin'}
+              />
+            )}
             <Card title="Contact">
               <InfoRow label="Name" value={quote.name} />
               <InfoRow label="Email">
