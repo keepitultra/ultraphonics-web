@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useMembersWithAccounts } from '../../firebase/useFirestore.js';
 import { Link } from 'react-router-dom';
 import MemberAvatar from '../MemberAvatar.jsx';
+import { quoteKind } from '../../utils/quoteForm.js';
 
 
 function formatDate(dateStr) {
@@ -31,7 +32,19 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function HeadsUpSection({ shows, clients, onTotalCount }) {
+/**
+ * When a lead arrived. receivedAt is a server Timestamp on new docs, but leads
+ * captured before that field existed only have createdAt, so fall back rather
+ * than sorting them to the bottom as 0.
+ */
+function leadReceivedMs(quote) {
+  const r = quote.receivedAt;
+  if (r?.toMillis) return r.toMillis();
+  if (typeof r?.seconds === 'number') return r.seconds * 1000;
+  return Date.parse(quote.createdAt || '') || 0;
+}
+
+export default function HeadsUpSection({ shows, clients, quotes = [], onTotalCount }) {
   const members = useMembersWithAccounts();
   const [lookaheadWeeks, setLookaheadWeeks] = useState(() => {
     const v = parseInt(localStorage.getItem('hu_lookahead_weeks') || '4');
@@ -110,7 +123,16 @@ export default function HeadsUpSection({ shows, clients, onTotalCount }) {
     return { upcomingShows, scheduledContacts, overdueClients };
   }, [shows, clients, lookaheadWeeks, overdueMonths]);
 
-  const totalCount = upcomingShows.length + scheduledContacts.length + overdueClients.length;
+  // "Unacknowledged" is simply status 'New' — moving a lead to Contacted (or
+  // anything else) is the acknowledgement, so it drops off here automatically.
+  // Newest first: a lead that just arrived is the one most worth answering.
+  const newLeads = useMemo(() => (
+    quotes
+      .filter(q => (q.status || 'New') === 'New')
+      .sort((a, b) => leadReceivedMs(b) - leadReceivedMs(a))
+  ), [quotes]);
+
+  const totalCount = newLeads.length + upcomingShows.length + scheduledContacts.length + overdueClients.length;
 
   useEffect(() => { onTotalCount?.(totalCount); }, [totalCount, onTotalCount]);
 
@@ -170,6 +192,46 @@ export default function HeadsUpSection({ shows, clients, onTotalCount }) {
         <div className="py-10 text-center text-[#444]">
           <i className="fas fa-check-circle text-2xl mb-2 block opacity-30" />
           <p className="text-xs">Nothing urgent right now</p>
+        </div>
+      )}
+
+      {/* New Leads — first, because an unanswered enquiry is the most
+          time-sensitive thing on this page. */}
+      {newLeads.length > 0 && (
+        <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden">
+          <div className="px-4 py-2 border-b border-[#2a2a2a] flex items-center gap-2">
+            <i className="fas fa-file-invoice-dollar text-[#ec4899] text-[10px]" />
+            <p className="text-[10px] font-bold text-[#888] uppercase tracking-wider">Unanswered Leads</p>
+            <span className="ml-auto text-[10px] text-[#555] font-mono">{newLeads.length}</span>
+          </div>
+          {newLeads.map(lead => {
+            const isContact = quoteKind(lead) === 'contact';
+            return (
+              <Link
+                key={lead.id}
+                to={`/quotes?id=${lead.id}`}
+                className="flex items-start gap-3 px-4 py-3 border-b border-[#2a2a2a] last:border-b-0 hover:bg-white/5 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-white truncate">{lead.name}</div>
+                  <div className="text-xs text-[#888] mt-0.5 truncate">
+                    {isContact
+                      ? 'Contact message'
+                      : [lead.eventType, lead.date ? formatDate(lead.date) : null, lead.location]
+                          .filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                <span
+                  className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  style={isContact
+                    ? { background: '#78716c20', color: '#a8a29e', border: '1px solid #78716c45' }
+                    : { background: '#ec489920', color: '#ec4899', border: '1px solid #ec489945' }}
+                >
+                  {isContact ? 'Contact' : 'Quote'}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
 

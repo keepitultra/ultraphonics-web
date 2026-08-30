@@ -139,7 +139,7 @@ function AdminDashboard() {
           className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}
         >
           <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-6">
-            <HeadsUpSection shows={shows} clients={clients} onTotalCount={setHeadsUpCount} />
+            <HeadsUpSection shows={shows} clients={clients} quotes={quoteLeads} onTotalCount={setHeadsUpCount} />
           </div>
         </aside>
 
