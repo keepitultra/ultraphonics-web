@@ -7,7 +7,10 @@ import { useSongs } from '../firebase/useFirestore.js';
 import { getSongs, saveSong, deleteSong, syncSongsBatch } from '../firestore-service.js';
 import { parseSongData } from '../utils/lyricParser.ts';
 import { useMembersWithAccounts } from '../firebase/useFirestore.js';
-import { formatDuration, parseDurationInput } from '../utils/setlistUtils.js';
+import { formatDuration, parseDurationInput, TUNING_OPTIONS, tuningOf } from '../utils/setlistUtils.js';
+import { capableVocalists } from '../utils/members.js';
+import { useIsMobile } from '../utils/useIsMobile.js';
+import MemberAvatar from '../components/MemberAvatar.jsx';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const GENRE_ORDER = ['Pop', 'Soul', 'Rock', 'Country', 'Other'];
@@ -80,7 +83,8 @@ function compareSongLists(importList, dbSongs) {
 // scripts/backfill-song-durations.mjs and edited by hand on this page.
 function buildSongDocument(imported) {
   const parsed = parseSongName(imported.lastKnownName);
-  return { ablesetId: imported.id, ablesetName: imported.lastKnownName, ablesetTime: imported.time || 0, ablesetSkipped: imported.skipped || false, title: parsed.title, artist: parsed.artist, key: parsed.key, active: true, capo: parsed.meta.capo, eflat: parsed.meta.isEflat, dropD: parsed.meta.isDrop };
+  const tuning = parsed.meta.isDrop ? 'Drop D' : parsed.meta.isEflat ? 'Eb' : 'Standard';
+  return { ablesetId: imported.id, ablesetName: imported.lastKnownName, ablesetTime: imported.time || 0, ablesetSkipped: imported.skipped || false, title: parsed.title, artist: parsed.artist, key: parsed.key, active: true, capo: parsed.meta.capo, tuning };
 }
 
 /**
@@ -227,8 +231,7 @@ function downloadSongPdf(song, opts) {
   const metaParts = [];
   if (song.key) metaParts.push(`Key: ${safeHtml(song.key)}`);
   if (song.capo > 0) metaParts.push(`Capo: ${song.capo}`);
-  if (song.eflat) metaParts.push('Eb Tuning');
-  if (song.dropD) metaParts.push('Drop D');
+  if (tuningOf(song) !== 'Standard') metaParts.push(`${tuningOf(song)} Tuning`);
 
   const doc = `<!DOCTYPE html>
 <html>
@@ -288,8 +291,10 @@ function Badge({ children, color = '#888' }) {
 }
 
 // ── Song row ──────────────────────────────────────────────────────────────
-function SongRow({ song, isActive, onSelect }) {
+function SongRow({ song, isActive, onSelect, members }) {
   const isArch = song.active === false;
+  const tuning = tuningOf(song);
+  const singers = members ? capableVocalists(song, members) : [];
   return (
     <button
       onClick={() => onSelect(song.id)}
@@ -301,10 +306,16 @@ function SongRow({ song, isActive, onSelect }) {
         <div className="text-sm font-semibold text-white truncate">{song.title || song.name}</div>
         {song.artist && <div className="text-xs text-[#888] truncate">{song.artist}</div>}
       </div>
+      {singers.length > 0 && (
+        <div className="shrink-0 flex items-center -space-x-1.5">
+          {singers.map(m => (
+            <MemberAvatar key={m.id} name={m.name} color={m.color} size={18} className="ring-2 ring-[#1a1a1a]" />
+          ))}
+        </div>
+      )}
       <div className="shrink-0 flex items-center gap-1 flex-wrap justify-end">
         {isArch && <Badge color="#ef4444">Arch</Badge>}
-        {song.eflat && <Badge color="#a78bfa">Eb</Badge>}
-        {song.dropD && <Badge color="#818cf8">Drop</Badge>}
+        {tuning !== 'Standard' && <Badge color="#a78bfa">{tuning}</Badge>}
         {song.capo > 0 && <Badge color="#f59e0b">Capo {song.capo}</Badge>}
         {song.key && <Badge color="#22c55e">{song.key}</Badge>}
       </div>
@@ -331,6 +342,7 @@ function SongManagerInner() {
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const selectedId = searchParams.get('id');
   const backUrl = searchParams.get('back');
@@ -414,8 +426,7 @@ function SongManagerInner() {
       key: selected.key || '',
       capo: selected.capo ?? 0,
       duration: selected.duration ? formatDuration(selected.duration) : '',
-      eflat: selected.eflat || false,
-      dropD: selected.dropD || false,
+      tuning: tuningOf(selected),
       chartUrl: selected.chartUrl || '',
       lyrics: selected.lyrics || '',
       notes: typeof selected.notes === 'string' ? selected.notes : (selected.notes || []).join('\n'),
@@ -476,7 +487,7 @@ function SongManagerInner() {
     const id = uuid();
     setIsNewSong(true);
     setIsDirty(true);
-    setEditFormState({ title: '', artist: '', genre: '', key: '', capo: 0, duration: '', eflat: false, dropD: false, chartUrl: '', lyrics: '', notes: '', showOnWebsite: false, vocalCapability: {}, preferredVocalist: '' });
+    setEditFormState({ title: '', artist: '', genre: '', key: '', capo: 0, duration: '', tuning: 'Standard', chartUrl: '', lyrics: '', notes: '', showOnWebsite: false, vocalCapability: {}, preferredVocalist: '' });
     setMode('edit');
     setSearchParams({ id }, { replace: false });
   }
@@ -490,6 +501,14 @@ function SongManagerInner() {
       setSearchParams({}, { replace: true });
     }
     setMode('view');
+  }
+
+  // Closes the mobile fullscreen detail view, back to the song list. Honours
+  // backUrl the same way the desktop back-arrow does, so a song opened from a
+  // setlist link returns there instead of stranding on an empty list.
+  function closeMobileDetail() {
+    if (backUrl) navigate(decodeURIComponent(backUrl));
+    else setSearchParams({}, { replace: true });
   }
 
   // ── AbleSet import ────────────────────────────────────────────────────
@@ -589,7 +608,10 @@ function SongManagerInner() {
   // ── Left panel ────────────────────────────────────────────────────────
   const leftPanel = (
     <div
-      className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] relative${drawerOpen ? ' drawer-open' : ''}`}
+      className={isMobile
+        ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[#1a1a1a] relative'
+        : `admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] relative${drawerOpen ? ' drawer-open' : ''}`
+      }
       onDragEnter={handleDragEnter}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
       onDragLeave={handleDragLeave}
@@ -695,14 +717,14 @@ function SongManagerInner() {
                   <i className={`fas fa-chevron-right text-[10px] text-[#555] transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`} />
                 </div>
               </button>
-              {isOpen && genreSongs.map(song => <SongRow key={song.id} song={song} isActive={selectedId === song.id} onSelect={selectSong} />)}
+              {isOpen && genreSongs.map(song => <SongRow key={song.id} song={song} isActive={selectedId === song.id} onSelect={selectSong} members={members} />)}
             </div>
           );
         })}
 
         {/* Alphabetical view */}
         {songSort === 'alpha' && filtered.map(song => (
-          <SongRow key={song.id} song={song} isActive={selectedId === song.id} onSelect={selectSong} />
+          <SongRow key={song.id} song={song} isActive={selectedId === song.id} onSelect={selectSong} members={members} />
         ))}
       </div>
 
@@ -737,7 +759,7 @@ function SongManagerInner() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Header – title/artist only */}
           <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-start gap-3">
-            {backUrl && (
+            {backUrl && !isMobile && (
               <button
                 onClick={() => navigate(decodeURIComponent(backUrl))}
                 className="shrink-0 p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors mt-0.5"
@@ -750,6 +772,33 @@ function SongManagerInner() {
               <h2 className="text-lg font-bold text-white truncate">{selected.title || selected.name}</h2>
               {selected.artist && <p className="text-sm text-[#888]">{selected.artist}</p>}
             </div>
+            {(() => {
+              const singers = capableVocalists(selected, members);
+              if (singers.length === 0) return null;
+              return (
+                <div className="shrink-0 flex items-center gap-1.5 flex-wrap justify-end max-w-[45%]" title="Can sing lead">
+                  {singers.map(m => (
+                    <span
+                      key={m.id}
+                      className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full text-[11px] font-semibold"
+                      style={{ background: `${m.color}18`, color: m.color, border: `1px solid ${m.color}35` }}
+                    >
+                      <MemberAvatar name={m.name} color={m.color} size={16} />
+                      {m.name}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
+            {isMobile && (
+              <button
+                onClick={closeMobileDetail}
+                className="shrink-0 p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors mt-0.5"
+                title="Close"
+              >
+                <i className="fas fa-times text-sm" />
+              </button>
+            )}
           </div>
 
           {/* Action bar */}
@@ -834,7 +883,7 @@ function SongManagerInner() {
           <div className="shrink-0 px-5 py-2.5 border-b border-[#2a2a2a] flex flex-wrap gap-x-5 gap-y-1">
             {selected.key && <MetaItem label="Key" value={selected.key} accent />}
             {selected.capo > 0 && <MetaItem label="Capo" value={`Fret ${selected.capo}`} />}
-            <MetaItem label="Tuning" value={selected.eflat ? 'Eb' : selected.dropD ? 'Drop D' : 'Standard'} />
+            <MetaItem label="Tuning" value={tuningOf(selected)} />
             {selected.genre && <MetaItem label="Genre" value={selected.genre} />}
             {selected.duration > 0 && (
               <MetaItem
@@ -853,10 +902,23 @@ function SongManagerInner() {
 
       {/* Song not found (URL has id but song not in list) */}
       {selectedId && !selected && mode === 'view' && (
-        <div className="flex-1 flex items-center justify-center text-[#555]">
-          <div className="text-center">
-            <i className="fas fa-circle-question text-4xl mb-3 block opacity-30" />
-            <p className="text-sm">Song not found</p>
+        <div className="flex-1 flex flex-col min-h-0">
+          {isMobile && (
+            <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex justify-end">
+              <button
+                onClick={closeMobileDetail}
+                className="shrink-0 p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <i className="fas fa-times text-sm" />
+              </button>
+            </div>
+          )}
+          <div className="flex-1 flex items-center justify-center text-[#555]">
+            <div className="text-center">
+              <i className="fas fa-circle-question text-4xl mb-3 block opacity-30" />
+              <p className="text-sm">Song not found</p>
+            </div>
           </div>
         </div>
       )}
@@ -886,14 +948,27 @@ function SongManagerInner() {
   );
 
   return (
-    <AdminShell activeApp="songs">
-      {/* Two-column layout */}
-      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
-        {leftPanel}
-        <div className="flex flex-col overflow-hidden bg-[#121212]">
-          {rightPanel}
+    <AdminShell activeApp="songs" hideDrawerToggle={isMobile}>
+      {isMobile ? (
+        <>
+          {/* Mobile: the song list is the primary view */}
+          {leftPanel}
+          {/* Fullscreen "L2" detail/edit view — closed with the X in its header */}
+          {(selectedId || mode === 'edit') && (
+            <div className="fixed inset-0 z-50 bg-[#121212] flex flex-col">
+              {rightPanel}
+            </div>
+          )}
+        </>
+      ) : (
+        /* Desktop: two-column layout */
+        <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+          {leftPanel}
+          <div className="flex flex-col overflow-hidden bg-[#121212]">
+            {rightPanel}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* AbleSet Import Modal */}
       {importOpen && pendingDiff && (
@@ -1156,9 +1231,14 @@ function SongForm({ form, setField, leadVocalists }) {
           </select>
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <Field label="Capo">
           <input type="number" min="0" max="12" value={form.capo ?? 0} onChange={e => setField('capo', e.target.value)} className={INPUT} style={{ maxWidth: 120 }} />
+        </Field>
+        <Field label="Tuning">
+          <select value={form.tuning || 'Standard'} onChange={e => setField('tuning', e.target.value)} className={INPUT}>
+            {TUNING_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
         </Field>
         <Field label="Length (m:ss)">
           <input
@@ -1167,15 +1247,12 @@ function SongForm({ form, setField, leadVocalists }) {
             value={form.duration || ''}
             onChange={e => setField('duration', e.target.value)}
             className={INPUT}
-            style={{ maxWidth: 120 }}
             placeholder="3:45"
           />
           <p className="text-[11px] text-[#555] mt-1">Used to estimate set lengths.</p>
         </Field>
       </div>
       <div className="flex flex-wrap gap-5">
-        <CheckField label="Eb Tuning (half-step down)" checked={!!form.eflat} onChange={v => setField('eflat', v)} />
-        <CheckField label="Drop D Tuning" checked={!!form.dropD} onChange={v => setField('dropD', v)} />
         <CheckField label="Show on Public Website" checked={!!form.showOnWebsite} onChange={v => setField('showOnWebsite', v)} />
       </div>
       <Field label="Chart URL (PDF)">

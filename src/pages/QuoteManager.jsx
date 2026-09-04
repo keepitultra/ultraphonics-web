@@ -14,6 +14,7 @@ import {
 } from '../utils/quoteForm.js';
 import { playChime } from '../utils/chime.js';
 import AvailabilityStrip from '../components/calendar/AvailabilityStrip.jsx';
+import { useIsMobile } from '../utils/useIsMobile.js';
 
 const ACCENT = '#ec4899';
 const INPUT = 'w-full px-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-sm focus:outline-none focus:border-[#ec4899]';
@@ -70,6 +71,7 @@ function QuoteManager() {
   const { data: quotes = [], loading } = useQuotes();
   const { data: clients = [] } = useClients();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
 
   // Emails carry ?id=; every other admin page uses a named param, so accept both.
   const selectedId = searchParams.get('id') || searchParams.get('quote');
@@ -127,6 +129,11 @@ function QuoteManager() {
   function select(id) {
     setSearchParams({ id }, { replace: false });
     closeDrawer();
+  }
+
+  // Closes the mobile fullscreen detail view, back to the lead list.
+  function closeMobileDetail() {
+    setSearchParams({}, { replace: true });
   }
 
   async function setStatus(status) {
@@ -208,14 +215,29 @@ function QuoteManager() {
 
   // ── Left ────────────────────────────────────────────────────────────────
   const leftPanel = (
-    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left${drawerOpen ? ' drawer-open' : ''}`}>
+    <div className={isMobile
+      ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[#1a1a1a] text-left'
+      : `admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left${drawerOpen ? ' drawer-open' : ''}`
+    }>
       <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search name, email, venue…"
-          className={INPUT}
-        />
+        <div className="relative">
+          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search name, email, venue…"
+            className={INPUT + ' pl-8 pr-8'}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-[#555] hover:text-white transition-colors"
+              title="Clear search"
+            >
+              <i className="fas fa-circle-xmark text-xs" />
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-1">
           {['All', ...QUOTE_STATUSES].map(s => {
             const on = statusFilter === s;
@@ -316,12 +338,21 @@ function QuoteManager() {
   const days = quote && !isContact ? daysUntil(quote.date) : null;
 
   const rightPanel = (
-    <div className="relative flex-1 min-w-0 flex flex-col overflow-hidden bg-[#121212] text-left">
+    <div className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[#121212] text-left">
       {!quote && (
-        <div className="flex-1 flex items-center justify-center text-center px-6">
-          <div>
-            <i className="fas fa-file-invoice-dollar text-5xl mb-4 block opacity-20 text-[#555]" />
-            <p className="text-sm text-[#555]">Select a lead</p>
+        <div className="flex-1 flex flex-col min-h-0">
+          {isMobile && (
+            <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a] flex justify-end">
+              <button onClick={closeMobileDetail} className="w-9 h-9 flex items-center justify-center rounded-lg text-[#888] hover:text-white hover:bg-white/5" title="Close">
+                <i className="fas fa-times text-sm" />
+              </button>
+            </div>
+          )}
+          <div className="flex-1 flex items-center justify-center text-center px-6">
+            <div>
+              <i className="fas fa-file-invoice-dollar text-5xl mb-4 block opacity-20 text-[#555]" />
+              <p className="text-sm text-[#555]">Select a lead</p>
+            </div>
           </div>
         </div>
       )}
@@ -330,7 +361,7 @@ function QuoteManager() {
         <>
           <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a]">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="flex-1 min-w-0 text-base font-bold text-white truncate">{quote.name}</h1>
+              <div className="flex-1 min-w-0 text-base font-bold text-white truncate">{quote.name}</div>
               {isContact && (
                 <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"
                   style={{ background: '#78716c20', color: '#a8a29e', border: '1px solid #78716c45' }}>
@@ -359,6 +390,12 @@ function QuoteManager() {
                 className="w-9 h-9 flex items-center justify-center rounded-lg text-[#555] hover:text-red-400 hover:bg-white/5">
                 <i className="fas fa-trash text-sm" />
               </button>
+              {isMobile && (
+                <button onClick={closeMobileDetail} title="Close"
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-[#888] hover:text-white hover:bg-white/5">
+                  <i className="fas fa-times text-sm" />
+                </button>
+              )}
             </div>
 
             <div className="mt-2 flex items-center gap-3 flex-wrap text-[11px] text-[#888]">
@@ -486,11 +523,25 @@ function QuoteManager() {
   );
 
   return (
-    <AdminShell activeApp="quotes">
-      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
-        {leftPanel}
-        {rightPanel}
-      </div>
+    <AdminShell activeApp="quotes" hideDrawerToggle={isMobile}>
+      {isMobile ? (
+        <>
+          {/* Mobile: the lead list is the primary view */}
+          {leftPanel}
+          {/* Fullscreen "L2" view — closed with the X in its header */}
+          {selectedId && (
+            <div className="fixed inset-0 z-50 bg-[#121212] flex flex-col">
+              {rightPanel}
+            </div>
+          )}
+        </>
+      ) : (
+        /* Desktop: two-column layout */
+        <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+          {leftPanel}
+          {rightPanel}
+        </div>
+      )}
     </AdminShell>
   );
 }

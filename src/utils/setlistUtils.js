@@ -68,6 +68,29 @@ export function indexSongs(songs) {
   return map;
 }
 
+/** Tuning dropdown options, in display order. */
+export const TUNING_OPTIONS = ['Standard', 'Eb', 'Drop D', 'C#'];
+
+/**
+ * A song's tuning. Prefers the `tuning` field; falls back to the legacy
+ * `eflat`/`dropD` booleans for songs saved before the tuning dropdown existed.
+ */
+export function tuningOf(song) {
+  if (song?.tuning) return song.tuning;
+  if (song?.dropD) return 'Drop D';
+  if (song?.eflat) return 'Eb';
+  return 'Standard';
+}
+
+/**
+ * Normalise a `vocalAssignments[songId]` entry to an array of member ids.
+ * Older setlists store a single id string; newer ones store an array.
+ */
+export function vocalistIds(entry) {
+  if (!entry) return [];
+  return Array.isArray(entry) ? entry : [entry];
+}
+
 /**
  * Break a flat setlist row array into its sets.
  *

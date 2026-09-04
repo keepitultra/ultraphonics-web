@@ -170,3 +170,8 @@ export function preferredVocalistId(songDoc, index) {
   const raw = songDoc?.preferredVocalist;
   return raw ? index.idOf(raw) : '';
 }
+
+/** Lead vocalists marked capable of singing a song, in roster order. */
+export function capableVocalists(songDoc, index) {
+  return index.leadVocalists.filter(m => hasCapability(songDoc, m.id, index));
+}

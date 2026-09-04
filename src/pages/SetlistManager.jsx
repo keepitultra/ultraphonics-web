@@ -9,10 +9,11 @@ import MemberAvatar from '../components/MemberAvatar.jsx';
 import AutoSetlistModal from '../components/setlist/AutoSetlistModal.jsx';
 import { saveSetlist, deleteSetlist } from '../firestore-service.js';
 import { hasCapability, preferredVocalistId } from '../utils/members.js';
+import { useIsMobile } from '../utils/useIsMobile.js';
 import {
   isSetMarker, cleanSetName, songTitle,
   formatLongDuration, buildSetBreakdown, summarizeSetlist,
-  buildPopularityMap, indexSongs,
+  buildPopularityMap, indexSongs, tuningOf, vocalistIds,
 } from '../utils/setlistUtils.js';
 
 function uuid() {
@@ -20,6 +21,14 @@ function uuid() {
     const r = Math.random() * 16 | 0;
     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
   });
+}
+
+/** Caps a list of vocalist avatars for cramped mobile rows: up to `max` shown,
+ * the rest collapsed into a "+N" count so the drag handle / remove button
+ * never gets crowded out. Desktop has room to just show everyone. */
+function capVocalists(vocalists, isMobile, max = 2) {
+  if (!isMobile || vocalists.length <= max) return { shown: vocalists, overflow: 0 };
+  return { shown: vocalists.slice(0, max), overflow: vocalists.length - max };
 }
 
 // ── Main component ────────────────────────────────────────────────────────
@@ -109,6 +118,7 @@ function PublicSetlistView({ id }) {
 // ── Read-only setlist rows ────────────────────────────────────────────────
 // Shared by the public share link and the admin viewer so the two can't drift.
 function SetlistRows({ songs, songsById, vocalAssignments, segues, members, linkTo, warnFor }) {
+  const isMobile = useIsMobile();
   const { sets } = buildSetBreakdown(songs, songsById);
   const setByStart = new Map(sets.map(s => [s.start, s]));
 
@@ -131,10 +141,11 @@ function SetlistRows({ songs, songsById, vocalAssignments, segues, members, link
           );
         }
 
-        const vocalistRef = vocalAssignments[song.id];
-        const vocalist = vocalistRef ? members.get(vocalistRef) : null;
+        const vocalists = vocalistIds(vocalAssignments[song.id]).map(id => members.get(id));
+        const { shown: shownVocalists, overflow } = capVocalists(vocalists, isMobile);
         const doc = songsById.get(song.id);
         const title = songTitle(song);
+        const tuning = doc ? tuningOf(doc) : 'Standard';
 
         return (
           <div key={`${song.id}-${idx}`} className="flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a] hover:bg-white/5">
@@ -146,16 +157,29 @@ function SetlistRows({ songs, songsById, vocalAssignments, segues, members, link
               <span className="flex-1 min-w-0 text-sm text-white font-medium truncate">{title}</span>
             )}
             <div className="shrink-0 flex items-center gap-1.5">
-              {doc?.eflat && <TinyBadge color="#a78bfa">Eb</TinyBadge>}
-              {doc?.dropD && <TinyBadge color="#818cf8">Drop</TinyBadge>}
+              {tuning !== 'Standard' && <TinyBadge color="#a78bfa">{tuning}</TinyBadge>}
               {doc?.capo > 0 && <TinyBadge color="#f59e0b">Capo {doc.capo}</TinyBadge>}
               {segues[song.id] && <TinyBadge color="#3b82f6">~</TinyBadge>}
               {warnFor?.(song, doc) && (
                 <i className="fas fa-triangle-exclamation text-amber-400 text-xs" title="No present singer capable of this song" />
               )}
-              {vocalist
-                ? <MemberAvatar name={vocalist.name} photoUrl={vocalist.avatarUrl} color={vocalist.color} size={24} />
-                : <span className="w-6" />}
+              {vocalists.length > 0 ? (
+                <div className="flex items-center -space-x-1.5" title={overflow ? vocalists.map(v => v.name).join(', ') : undefined}>
+                  {shownVocalists.map(v => (
+                    <MemberAvatar key={v.id} name={v.name} color={v.color} size={24} className="ring-2 ring-[#121212]" />
+                  ))}
+                  {overflow > 0 && (
+                    <span
+                      className="rounded-full flex items-center justify-center font-bold ring-2 ring-[#121212]"
+                      style={{ width: 24, height: 24, fontSize: 10, background: '#2a2a2a', color: '#aaa' }}
+                    >
+                      +{overflow}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="w-6" />
+              )}
             </div>
           </div>
         );
@@ -173,6 +197,7 @@ function AdminSetlistManager() {
   const { data: allShows = [] } = useShows();
   const members = useMembersWithAccounts();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
 
   const selectedId = searchParams.get('id');
   const triggerNew = searchParams.get('new') === '1';
@@ -197,6 +222,10 @@ function AdminSetlistManager() {
   const [libSearch, setLibSearch] = useState('');
   const [libSort, setLibSort] = useState('title'); // title | plays
   const [showSetMarkersOnly, setShowSetMarkersOnly] = useState(false);
+
+  // Mobile-only: which pane of the fullscreen editor is showing. Desktop shows
+  // the setlist and library side by side, so this is meaningless there.
+  const [mobileEditTab, setMobileEditTab] = useState('setlist'); // setlist | songs
 
   // Modals / menus
   const [propsModalSong, setPropsModalSong] = useState(null);
@@ -224,6 +253,8 @@ function AdminSetlistManager() {
   // Load setlist when selectedId changes OR when setlists data first arrives
   const selected = setlists.find(s => s.id === selectedId);
   const loadedIdRef = useRef(null);
+  // See the "Editing is only meaningful..." effect below for why this exists.
+  const newSetlistPendingRef = useRef(false);
   useEffect(() => {
     if (!selected) return;
     // Already loaded this exact setlist — don't reload (avoids wiping edits on re-render)
@@ -312,9 +343,22 @@ function AdminSetlistManager() {
     return () => { if (librarySortable.current?.el) librarySortable.current.destroy(); librarySortable.current = null; };
   }, [leftTab, editing]);
 
-  // Editing is only meaningful with a setlist loaded
+  // Editing is only meaningful with a setlist loaded. Guards e.g. the browser
+  // back button landing on a bare /setlists while mode was still 'edit'.
+  //
+  // handleNew() sets mode 'edit' and a brand-new id together, but the id
+  // travels through react-router's setSearchParams while mode is a plain
+  // useState — they don't always land in the same commit, so there's one
+  // transient render where mode is already 'edit' but selectedId hasn't
+  // caught up yet. Without the guard below, this effect fires on exactly
+  // that render and immediately flips back to 'view', permanently — the new
+  // id then arrives one render later with edit mode already undone.
+  // newSetlistPendingRef marks that transient window so it's ignored once.
   useEffect(() => {
-    if (!selectedId && editing) setMode('view');
+    if (!selectedId && editing) {
+      if (newSetlistPendingRef.current) { newSetlistPendingRef.current = false; return; }
+      setMode('view');
+    }
   }, [selectedId, editing]);
 
   // ── Actions ───────────────────────────────────────────────────────────
@@ -328,6 +372,7 @@ function AdminSetlistManager() {
     if (isDirty && !window.confirm('Start a new setlist? Unsaved changes will be lost.')) return;
     const id = uuid();
     loadedIdRef.current = id;
+    newSetlistPendingRef.current = true;
     snapshotRef.current = { songs: [], name: 'New Setlist', vocalAssignments: {}, segues: {} };
     setSetlistSongs([]);
     setSetlistName('New Setlist');
@@ -336,6 +381,7 @@ function AdminSetlistManager() {
     setMode('edit');
     setIsDirty(true);
     setLeftTab('library');
+    setMobileEditTab('songs'); // nothing to reorder yet — start where the action is
     setSearchParams({ id }, { replace: false });
   }
 
@@ -404,6 +450,7 @@ function AdminSetlistManager() {
     setSetlistName(name);
     setIsDirty(true);
     setMode('edit');
+    setMobileEditTab('setlist'); // songs already carried over — show them
     setMenuOpen(false);
     setSearchParams({ id }, { replace: false });
   }
@@ -443,17 +490,17 @@ function AdminSetlistManager() {
     let attempted = 0, assigned = 0, unresolved = 0, missingData = 0;
     for (const song of setlistSongs) {
       if (isSetMarker(song)) continue;
-      const current = next[song.id];
-      // Preserve a manually-cast guest; band-member picks are recomputed.
-      if (current && members.get(current).type === 'guest') continue;
+      const current = vocalistIds(next[song.id]);
+      // Preserve manually-cast guests; band-member picks are recomputed.
+      if (current.length > 0 && current.some(id => members.get(id).type === 'guest')) continue;
       const songDoc = songsById.get(song.id);
       if (!songDoc) continue;
       attempted++;
       if (!songDoc.preferredVocalist && !songDoc.vocalCapability) missingData++;
       const preferred = preferredVocalistId(songDoc, members);
-      if (preferred && present.has(preferred)) { next[song.id] = preferred; assigned++; continue; }
+      if (preferred && present.has(preferred)) { next[song.id] = [preferred]; assigned++; continue; }
       const capable = leadIds.filter(v => present.has(v) && hasCapability(songDoc, v, members));
-      if (capable.length > 0) { next[song.id] = capable[0]; assigned++; }
+      if (capable.length > 0) { next[song.id] = [capable[0]]; assigned++; }
       else { delete next[song.id]; unresolved++; }
     }
     setVocalAssignments(next);
@@ -479,6 +526,7 @@ function AdminSetlistManager() {
     setSegues({});
     setIsDirty(true);
     setAutoModalOpen(false);
+    setMobileEditTab('setlist'); // show what got generated
     if (result.warnings.length) alert(result.warnings.join('\n'));
   }
 
@@ -490,9 +538,16 @@ function AdminSetlistManager() {
   // A song has no viable singer for this gig: linked to a show, nobody assigned yet,
   // and nobody present is marked capable of it.
   function hasNoAssignmentWarning(song, songDoc) {
-    if (!linkedShow || vocalAssignments[song.id]) return false;
+    if (!linkedShow || vocalistIds(vocalAssignments[song.id]).length > 0) return false;
     const present = new Set((linkedShow.personnel || []).map(p => members.idOf(p)));
     return !members.leadVocalists.some(m => present.has(m.id) && hasCapability(songDoc, m.id, members));
+  }
+
+  // Closes the mobile fullscreen view, back to the setlists list.
+  function closeMobileDetail() {
+    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    setIsDirty(false);
+    setSearchParams({}, { replace: true });
   }
 
   function handleShare() {
@@ -525,12 +580,101 @@ function AdminSetlistManager() {
       ? (popularity.get(b.id) || 0) - (popularity.get(a.id) || 0) || songTitle(a).localeCompare(songTitle(b))
       : songTitle(a).localeCompare(songTitle(b)));
 
+  // Song library, to add into the setlist being edited. Desktop shows this
+  // as a drag source next to the setlist; mobile shows it as its own
+  // "Add Songs" tab with a tap-to-add button (see mobileEditTab).
+  const libraryPanel = (
+    <>
+      <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
+        <div className="relative">
+          <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
+          <input
+            type="text"
+            value={libSearch}
+            onChange={e => setLibSearch(e.target.value)}
+            placeholder="Search songs..."
+            className="w-full pl-8 pr-3 min-h-[44px] bg-[#121212] border border-[#2a2a2a] rounded-xl text-white text-sm placeholder-[#555] focus:outline-none focus:border-[#3b82f6]"
+          />
+        </div>
+        <div className="flex gap-1 p-1 bg-[#121212] rounded-xl border border-[#2a2a2a]">
+          {[['title', 'A–Z'], ['plays', 'Most played']].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setLibSort(key)}
+              className={`flex-1 min-h-[36px] rounded-lg text-xs font-semibold transition-colors ${
+                libSort === key ? 'bg-[#2a2a2a] text-white' : 'text-[#777] hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer text-xs text-[#888] hover:text-white transition-colors min-h-[32px]">
+          <input
+            type="checkbox"
+            checked={showSetMarkersOnly}
+            onChange={e => setShowSetMarkersOnly(e.target.checked)}
+            className="rounded w-4 h-4"
+          />
+          Set Markers only
+        </label>
+      </div>
+      <div ref={libraryRef} className="flex-1 min-h-0 overflow-y-auto">
+        {libFiltered.map(song => {
+          const alreadyIn = inSetlistIds.has(song.id);
+          const plays = popularity.get(song.id) || 0;
+          return (
+            <div
+              key={song.id}
+              data-id={song.id}
+              className={`flex items-center gap-3 px-3 py-2.5 border-b border-[#2a2a2a] transition-colors ${
+                alreadyIn ? 'opacity-40' : 'hover:bg-white/5 cursor-grab'
+              }`}
+            >
+              <i className="fas fa-grip-vertical text-[#444] text-xs shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className={`text-sm font-semibold truncate ${isSetMarker(song) ? 'text-[#3b82f6]' : 'text-white'}`}>
+                  {songTitle(song)}
+                </div>
+                {song.artist && !isSetMarker(song) && <div className="text-xs text-[#888] truncate">{song.artist}</div>}
+              </div>
+              {plays > 0 && !isSetMarker(song) && (
+                <span className="shrink-0 text-[10px] text-[#666] font-mono" title={`In ${plays} setlist${plays !== 1 ? 's' : ''}`}>
+                  ×{plays}
+                </span>
+              )}
+              {!alreadyIn && (
+                <button
+                  onClick={() => {
+                    setSetlistSongs(prev => [...prev, rowFor(song)]);
+                    setIsDirty(true);
+                  }}
+                  className="shrink-0 w-11 h-11 flex items-center justify-center bg-[#1d4ed8]/20 border border-[#1d4ed8]/40 text-[#3b82f6] rounded-xl transition-colors hover:bg-[#1d4ed8]/40"
+                  title="Add to setlist"
+                >
+                  <i className="fas fa-plus text-xs" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+
   // ── Left panel ────────────────────────────────────────────────────────
+  // The mobile editor doesn't let you browse other setlists mid-edit (see
+  // mobileEditTab) — editing there is a focused fullscreen task with its own
+  // Setlist/Add Songs tabs — so this panel is always just the setlists list
+  // on mobile, regardless of the editing state.
   const leftPanel = (
-    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left${drawerOpen ? ' drawer-open' : ''}`}>
+    <div className={isMobile
+      ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[#1a1a1a] text-left'
+      : `admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left${drawerOpen ? ' drawer-open' : ''}`
+    }>
       {/* The song library is only useful while editing — in view mode the panel
           is just the list of setlists, with no tab bar to decide about. */}
-      {editing ? (
+      {editing && !isMobile ? (
         <div className="shrink-0 flex border-b border-[#2a2a2a]">
           {['setlists', 'library'].map(tab => (
             <button
@@ -552,7 +696,7 @@ function AdminSetlistManager() {
         </div>
       )}
 
-      {(!editing || leftTab === 'setlists') && (
+      {(!editing || leftTab === 'setlists' || isMobile) && (
         <>
           <div className="flex-1 min-h-0 overflow-y-auto">
             {setlists.length === 0 && (
@@ -607,84 +751,7 @@ function AdminSetlistManager() {
         </>
       )}
 
-      {editing && leftTab === 'library' && (
-        <>
-          <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
-            <div className="relative">
-              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
-              <input
-                type="text"
-                value={libSearch}
-                onChange={e => setLibSearch(e.target.value)}
-                placeholder="Search songs..."
-                className="w-full pl-8 pr-3 min-h-[44px] bg-[#121212] border border-[#2a2a2a] rounded-xl text-white text-sm placeholder-[#555] focus:outline-none focus:border-[#3b82f6]"
-              />
-            </div>
-            <div className="flex gap-1 p-1 bg-[#121212] rounded-xl border border-[#2a2a2a]">
-              {[['title', 'A–Z'], ['plays', 'Most played']].map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setLibSort(key)}
-                  className={`flex-1 min-h-[36px] rounded-lg text-xs font-semibold transition-colors ${
-                    libSort === key ? 'bg-[#2a2a2a] text-white' : 'text-[#777] hover:text-white'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer text-xs text-[#888] hover:text-white transition-colors min-h-[32px]">
-              <input
-                type="checkbox"
-                checked={showSetMarkersOnly}
-                onChange={e => setShowSetMarkersOnly(e.target.checked)}
-                className="rounded w-4 h-4"
-              />
-              Set Markers only
-            </label>
-          </div>
-          <div ref={libraryRef} className="flex-1 min-h-0 overflow-y-auto">
-            {libFiltered.map(song => {
-              const alreadyIn = inSetlistIds.has(song.id);
-              const plays = popularity.get(song.id) || 0;
-              return (
-                <div
-                  key={song.id}
-                  data-id={song.id}
-                  className={`flex items-center gap-3 px-3 py-2.5 border-b border-[#2a2a2a] transition-colors ${
-                    alreadyIn ? 'opacity-40' : 'hover:bg-white/5 cursor-grab'
-                  }`}
-                >
-                  <i className="fas fa-grip-vertical text-[#444] text-xs shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-semibold truncate ${isSetMarker(song) ? 'text-[#3b82f6]' : 'text-white'}`}>
-                      {songTitle(song)}
-                    </div>
-                    {song.artist && !isSetMarker(song) && <div className="text-xs text-[#888] truncate">{song.artist}</div>}
-                  </div>
-                  {plays > 0 && !isSetMarker(song) && (
-                    <span className="shrink-0 text-[10px] text-[#666] font-mono" title={`In ${plays} setlist${plays !== 1 ? 's' : ''}`}>
-                      ×{plays}
-                    </span>
-                  )}
-                  {!alreadyIn && (
-                    <button
-                      onClick={() => {
-                        setSetlistSongs(prev => [...prev, rowFor(song)]);
-                        setIsDirty(true);
-                      }}
-                      className="shrink-0 w-11 h-11 flex items-center justify-center bg-[#1d4ed8]/20 border border-[#1d4ed8]/40 text-[#3b82f6] rounded-xl transition-colors hover:bg-[#1d4ed8]/40"
-                      title="Add to setlist"
-                    >
-                      <i className="fas fa-plus text-xs" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+      {editing && !isMobile && leftTab === 'library' && libraryPanel}
     </div>
   );
 
@@ -692,7 +759,7 @@ function AdminSetlistManager() {
   const hasSetlist = !!selectedId;
 
   const rightPanel = (
-    <div className={`relative flex flex-col overflow-hidden text-left ${editing ? 'bg-[#141821]' : 'bg-[#121212]'}`}>
+    <div className={`relative flex-1 min-h-0 flex flex-col overflow-hidden text-left ${editing ? 'bg-[#141821]' : 'bg-[#121212]'}`}>
       {/* Edit mode gets an unmistakable banner across the top so there's never
           any doubt about which mode you're in. */}
       {hasSetlist && editing && (
@@ -715,13 +782,13 @@ function AdminSetlistManager() {
                 className="flex-1 min-w-0 px-3 min-h-[44px] bg-[#0f1218] border border-[#3b82f6]/50 rounded-xl text-white text-sm font-bold focus:outline-none focus:border-[#3b82f6]"
               />
             ) : (
-              <h1 className="flex-1 min-w-0 text-sm font-bold text-white truncate">{setlistName}</h1>
+              <div className="flex-1 min-w-0 text-sm font-bold text-white truncate">{setlistName}</div>
             )}
 
             {!editing && (
               <div className="shrink-0 flex items-center gap-2">
                 <button
-                  onClick={() => { setMode('edit'); setLeftTab('library'); }}
+                  onClick={() => { setMode('edit'); setLeftTab('library'); setMobileEditTab('setlist'); }}
                   className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-[#1d4ed8] hover:bg-[#1e40af] text-white transition-colors flex items-center gap-2"
                 >
                   <i className="fas fa-pen-to-square" />
@@ -747,6 +814,15 @@ function AdminSetlistManager() {
                     </>
                   )}
                 </div>
+                {isMobile && (
+                  <button
+                    onClick={closeMobileDetail}
+                    className="w-11 h-11 flex items-center justify-center rounded-xl text-[#888] hover:text-white hover:bg-white/5 transition-colors"
+                    title="Close"
+                  >
+                    <i className="fas fa-times" />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -827,7 +903,11 @@ function AdminSetlistManager() {
           <div className="h-full flex items-center justify-center text-[#555]">
             <div className="text-center px-6">
               <i className="fas fa-music text-4xl mb-3 block opacity-20" />
-              <p className="text-sm">{editing ? 'Drag songs in from the library, or build one automatically' : 'This setlist is empty'}</p>
+              <p className="text-sm">
+                {editing
+                  ? (isMobile ? 'Tap Add Songs, or build one automatically' : 'Drag songs in from the library, or build one automatically')
+                  : 'This setlist is empty'}
+              </p>
               {editing && (
                 <button
                   onClick={openAutoSetlist}
@@ -858,9 +938,10 @@ function AdminSetlistManager() {
         <div ref={setlistRef} className={editing ? 'min-h-[2px]' : 'hidden'}>
           {editing && setlistSongs.map((song, idx) => {
             const marker = isSetMarker(song);
-            const vocalistRef = vocalAssignments[song.id];
-            const vocalist = vocalistRef ? members.get(vocalistRef) : null;
+            const vocalists = vocalistIds(vocalAssignments[song.id]).map(id => members.get(id));
+            const { shown: shownVocalists, overflow } = capVocalists(vocalists, isMobile);
             const doc = songsById.get(song.id);
+            const tuning = doc ? tuningOf(doc) : 'Standard';
 
             if (marker) {
               return (
@@ -893,19 +974,30 @@ function AdminSetlistManager() {
                 </span>
 
                 <div className="shrink-0 flex items-center gap-1.5">
-                  {doc?.eflat && <TinyBadge color="#a78bfa">Eb</TinyBadge>}
-                  {doc?.dropD && <TinyBadge color="#818cf8">Drop</TinyBadge>}
+                  {tuning !== 'Standard' && <TinyBadge color="#a78bfa">{tuning}</TinyBadge>}
                   {doc?.capo > 0 && <TinyBadge color="#f59e0b">Capo {doc.capo}</TinyBadge>}
                   {segues[song.id] && <TinyBadge color="#3b82f6">~</TinyBadge>}
                 </div>
 
                 <button
                   onClick={() => setPropsModalSong({ song, idx })}
-                  className="shrink-0 w-11 h-11 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
-                  title={vocalist ? `Vocalist: ${vocalist.name} — tap to change` : 'No vocalist assigned — tap to assign'}
+                  className="shrink-0 min-w-11 h-11 flex items-center justify-center gap-1 rounded-xl hover:bg-white/10 transition-colors px-1"
+                  title={vocalists.length ? `Vocalists: ${vocalists.map(v => v.name).join(', ')} — tap to change` : 'No vocalist assigned — tap to assign'}
                 >
-                  {vocalist ? (
-                    <MemberAvatar name={vocalist.name} photoUrl={vocalist.avatarUrl} color={vocalist.color} size={26} />
+                  {vocalists.length > 0 ? (
+                    <div className="flex items-center -space-x-1.5">
+                      {shownVocalists.map(v => (
+                        <MemberAvatar key={v.id} name={v.name} color={v.color} size={26} className="ring-2 ring-[#141821]" />
+                      ))}
+                      {overflow > 0 && (
+                        <span
+                          className="rounded-full flex items-center justify-center font-bold ring-2 ring-[#141821]"
+                          style={{ width: 26, height: 26, fontSize: 10, background: '#2a2a2a', color: '#aaa' }}
+                        >
+                          +{overflow}
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <span className="w-[26px] h-[26px] flex items-center justify-center rounded-full bg-amber-400/15 border border-amber-400/50">
                       <i className="fas fa-triangle-exclamation text-amber-400 text-[10px]" />
@@ -960,12 +1052,60 @@ function AdminSetlistManager() {
     </div>
   );
 
+  const setlistSongCount = setlistSongs.filter(s => !isSetMarker(s)).length;
+
   return (
-    <AdminShell activeApp="setlists">
-      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
-        {leftPanel}
-        {rightPanel}
-      </div>
+    <AdminShell activeApp="setlists" hideDrawerToggle={isMobile}>
+      {isMobile ? (
+        <>
+          {/* Mobile: the setlist list is the primary view */}
+          {leftPanel}
+          {/* Fullscreen "L2" view/edit — closed with the X (view) or Cancel/Save (edit) */}
+          {hasSetlist && (
+            <div className="fixed inset-0 z-50 bg-[#121212] flex flex-col">
+              {editing && (
+                <div className="shrink-0 flex border-b border-[#2b3348] bg-[#141821]">
+                  <button
+                    onClick={() => setMobileEditTab('setlist')}
+                    className={`flex-1 min-h-[44px] text-xs font-semibold uppercase tracking-wider transition-colors ${
+                      mobileEditTab === 'setlist' ? 'text-[#3b82f6] border-b-2 border-[#3b82f6]' : 'text-[#888] hover:text-white'
+                    }`}
+                  >
+                    Setlist{setlistSongCount > 0 ? ` (${setlistSongCount})` : ''}
+                  </button>
+                  <button
+                    onClick={() => setMobileEditTab('songs')}
+                    className={`flex-1 min-h-[44px] text-xs font-semibold uppercase tracking-wider transition-colors ${
+                      mobileEditTab === 'songs' ? 'text-[#3b82f6] border-b-2 border-[#3b82f6]' : 'text-[#888] hover:text-white'
+                    }`}
+                  >
+                    Add Songs
+                  </button>
+                </div>
+              )}
+
+              {/* Kept mounted (just hidden) rather than conditionally rendered while
+                  editing, so the Sortable.js drag-reorder instance below never has
+                  to be torn down and recreated as the tabs switch. */}
+              <div className={editing && mobileEditTab !== 'setlist' ? 'hidden' : 'flex-1 min-h-0 flex flex-col'}>
+                {rightPanel}
+              </div>
+
+              {editing && (
+                <div className={mobileEditTab !== 'songs' ? 'hidden' : 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[#1a1a1a]'}>
+                  {libraryPanel}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        /* Desktop: two-column layout, library and setlist side by side while editing */
+        <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+          {leftPanel}
+          {rightPanel}
+        </div>
+      )}
 
       {propsModalSong && (
         <SongPropertiesModal
@@ -974,10 +1114,10 @@ function AdminSetlistManager() {
           segues={segues}
           members={members}
           guestOptions={(linkedShow?.personnel || []).filter(p => members.get(p).type === 'guest')}
-          onSaveLocal={(songId, { vocalist, segue }) => {
+          onSaveLocal={(songId, { vocalists, segue }) => {
             setVocalAssignments(prev => {
               const next = { ...prev };
-              if (vocalist) next[songId] = vocalist;
+              if (vocalists.length) next[songId] = vocalists;
               else delete next[songId];
               return next;
             });
@@ -1043,13 +1183,17 @@ function TinyBadge({ children, color }) {
 // modal only handles what's specific to this one setlist: who's singing it
 // and whether it segues into the next song.
 function SongPropertiesModal({ song, vocalAssignments, segues, guestOptions = [], members, onSaveLocal, onClose }) {
-  // Existing data may hold a legacy name; normalise to an id so selection matches.
-  const [vocalist, setVocalist] = useState(
-    vocalAssignments[song.id] ? members.idOf(vocalAssignments[song.id]) : '');
+  // Existing data may hold legacy names or a single id; normalise to ids so selection matches.
+  const [vocalists, setVocalists] = useState(
+    vocalistIds(vocalAssignments[song.id]).map(id => members.idOf(id)));
   const [segue, setSegue] = useState(!!segues[song.id]);
 
+  function toggleVocalist(id) {
+    setVocalists(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
+  }
+
   function handleSave() {
-    onSaveLocal(song.id, { vocalist, segue });
+    onSaveLocal(song.id, { vocalists, segue });
     onClose();
   }
 
@@ -1066,33 +1210,33 @@ function SongPropertiesModal({ song, vocalAssignments, segues, guestOptions = []
 
         <div className="p-5 space-y-5">
           <div>
-            <p className="text-xs text-[#888] uppercase tracking-wider font-semibold mb-2">Vocalist (this setlist)</p>
+            <p className="text-xs text-[#888] uppercase tracking-wider font-semibold mb-2">Vocalists (this setlist)</p>
             <div className="flex flex-wrap gap-1.5">
               <button
-                onClick={() => setVocalist('')}
-                className={`min-h-[44px] px-3 rounded-xl text-xs font-semibold transition-colors ${
-                  vocalist === '' ? 'bg-[#2a2a2a] text-white border border-[#555]' : 'text-[#888] hover:text-white hover:bg-white/5'
-                }`}
+                onClick={() => setVocalists([])}
+                disabled={vocalists.length === 0}
+                className="min-h-[44px] px-3 rounded-xl text-xs font-semibold transition-colors text-[#888] hover:text-white hover:bg-white/5 disabled:opacity-40 disabled:hover:bg-transparent"
               >
-                None
+                Clear
               </button>
               {[...members.bandMembers.map(m => m.id), ...guestOptions.map(g => members.idOf(g))]
                 .filter((id, i, arr) => arr.indexOf(id) === i)
                 .map(id => {
                   const m = members.get(id);
-                  const isActive = vocalist === id;
+                  const isActive = vocalists.includes(id);
                   return (
                     <button
                       key={id}
-                      onClick={() => setVocalist(id)}
+                      onClick={() => toggleVocalist(id)}
                       className="min-h-[44px] flex items-center gap-1.5 px-2.5 rounded-xl text-xs font-semibold transition-all"
                       style={isActive
                         ? { background: `${m.color}30`, color: m.color, border: `1px solid ${m.color}60` }
                         : { color: '#888', border: '1px solid transparent' }
                       }
                     >
-                      <MemberAvatar name={m.name} photoUrl={m.avatarUrl} color={m.color} size={22} />
+                      <MemberAvatar name={m.name} color={m.color} size={22} />
                       {m.name}
+                      {isActive && <i className="fas fa-check text-[10px]" />}
                     </button>
                   );
                 })}

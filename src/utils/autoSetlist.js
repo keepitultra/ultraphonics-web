@@ -205,7 +205,7 @@ export function generateSetlist({
         if (p < bestPenalty) { bestPenalty = p; best = c; }
       }
       if (!best) { unassigned++; continue; }
-      vocalAssignments[song.id] = best;
+      vocalAssignments[song.id] = [best];
       counts[best] = (counts[best] || 0) + 1;
       prev2 = prev;
       prev = best;

@@ -7,6 +7,7 @@ import { useShows, useSetlists, useClients, useMembersWithAccounts } from '../fi
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import { saveShow, deleteShow, saveSetlist, duplicateSetlist } from '../firestore-service.js';
 import { slugify, makeUniqueSlug } from '../utils.js';
+import { useIsMobile } from '../utils/useIsMobile.js';
 
 
 const ACCENT    = '#a78bfa';
@@ -154,6 +155,7 @@ function ShowManager() {
   const { data: clients = [] } = useClients();
   const members = useMembersWithAccounts();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
 
   const rawShowId = searchParams.get('show') || null;
   const selectedShowId = rawShowId === 'new' ? null : rawShowId;
@@ -166,6 +168,8 @@ function ShowManager() {
   const [personnelFilter, setPersonnelFilter] = useState(() => {
     try { return JSON.parse(localStorage.getItem('sm_personnelFilter') || '[]'); } catch { return []; }
   });
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const hasExtraShowFilters = showSortDir !== 'asc' || showYear !== String(new Date().getFullYear());
 
   function togglePersonnelFilter(name) {
     setPersonnelFilter(prev => {
@@ -288,6 +292,11 @@ function ShowManager() {
     closeDrawer();
   }
 
+  // Closes the mobile fullscreen detail view, back to the show list.
+  function closeMobileDetail() {
+    setSearchParams({}, { replace: true });
+  }
+
   // ── Show form helpers ──────────────────────────────────────────────────────
   function openNewShow() {
     const id = uuid();
@@ -392,27 +401,70 @@ function ShowManager() {
 
   // ── Left panel ─────────────────────────────────────────────────────────────
   const leftPanel = (
-    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}>
+    <div className={isMobile
+      ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[#1a1a1a]'
+      : `admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`
+    }>
       {/* Show controls */}
-      <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
+      <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2.5">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
-            <input type="text" value={showSearch} onChange={e => setShowSearch(e.target.value)} placeholder="Search shows..." className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs placeholder-[#555] focus:outline-none focus:border-[#a78bfa]" />
+            <input
+              type="text"
+              value={showSearch}
+              onChange={e => setShowSearch(e.target.value)}
+              placeholder="Search shows..."
+              className="w-full pl-8 pr-8 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs placeholder-[#555] focus:outline-none focus:border-[#a78bfa]"
+            />
+            {showSearch && (
+              <button
+                onClick={() => setShowSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-[#555] hover:text-white transition-colors"
+                title="Clear search"
+              >
+                <i className="fas fa-circle-xmark text-xs" />
+              </button>
+            )}
           </div>
-          <button onClick={openNewShow} className="shrink-0 px-3 py-2 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-lg text-xs font-semibold transition-colors">
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setFilterPanelOpen(v => !v)}
+              className={`relative w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${
+                filterPanelOpen ? 'bg-[#a78bfa]/10 border-[#a78bfa]/40 text-[#a78bfa]' : 'bg-[#121212] border-[#2a2a2a] text-[#888] hover:text-white'
+              }`}
+              title="Year & sort"
+            >
+              <i className="fas fa-sliders text-xs" />
+              {hasExtraShowFilters && (
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />
+              )}
+            </button>
+            {filterPanelOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setFilterPanelOpen(false)} />
+                <div className="absolute right-0 top-full mt-1.5 z-40 w-52 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl p-3 space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#555] mb-1.5">Year</label>
+                    <select value={showYear} onChange={e => { setShowYear(e.target.value); localStorage.setItem('sm_showYear', e.target.value); }} className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs focus:outline-none focus:border-[#a78bfa]">
+                      <option value="">All years</option>
+                      {showYears.map(y => <option key={y}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#555] mb-1.5">Sort</label>
+                    <select value={showSortDir} onChange={e => setShowSortDir(e.target.value)} className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs focus:outline-none focus:border-[#a78bfa]">
+                      <option value="desc">Newest first</option>
+                      <option value="asc">Oldest first</option>
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={openNewShow} className="shrink-0 w-9 h-9 flex items-center justify-center bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-lg text-xs font-semibold transition-colors" title="New show">
             <i className="fas fa-plus" />
           </button>
-        </div>
-        <div className="flex gap-2">
-          <select value={showYear} onChange={e => { setShowYear(e.target.value); localStorage.setItem('sm_showYear', e.target.value); }} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#a78bfa]">
-            <option value="">All years</option>
-            {showYears.map(y => <option key={y}>{y}</option>)}
-          </select>
-          <select value={showSortDir} onChange={e => setShowSortDir(e.target.value)} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#a78bfa]">
-            <option value="desc">Newest first</option>
-            <option value="asc">Oldest first</option>
-          </select>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {members.bandMembers.map(m => {
@@ -502,7 +554,7 @@ function ShowManager() {
 
   // ── Right panel ────────────────────────────────────────────────────────────
   const rightPanel = (
-    <div className="flex flex-col overflow-hidden bg-[#121212]">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[#121212]">
       {!selectedShowId && !showEditMode && (
         <div className="flex-1 flex items-center justify-center h-full">
           <div className="text-center">
@@ -523,7 +575,7 @@ function ShowManager() {
             <button onClick={handleCancelShowEdit} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors">
               <i className="fas fa-times text-sm" />
             </button>
-            <h2 className="flex-1 text-sm font-bold text-white">{showForm.id && allShows.find(s => s.id === showForm.id) ? 'Edit Show' : 'New Show'}</h2>
+            <div className="flex-1 text-sm font-bold text-white">{showForm.id && allShows.find(s => s.id === showForm.id) ? 'Edit Show' : 'New Show'}</div>
             <button onClick={handleSaveShow} disabled={savingShow} className="px-4 py-2 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2">
               {savingShow ? <><i className="fas fa-spinner fa-spin" /> Saving</> : <><i className="fas fa-check" /> Save</>}
             </button>
@@ -548,9 +600,9 @@ function ShowManager() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-center gap-3">
             <div className="flex-1 min-w-0 overflow-hidden">
-              <h2 className="text-base font-bold text-white text-left truncate w-full">
+              <div className="text-base font-bold text-white text-left truncate w-full">
                 {[selectedShow.venue, formatDate(selectedShow.date)].filter(Boolean).join(', ') || 'Unnamed Show'}
-              </h2>
+              </div>
               {selectedShow.personnel?.length > 0 && (
                 <div className="flex items-center justify-start gap-1 mt-1.5 flex-wrap">
                   {selectedShow.personnel.map(p => <MemberAvatar key={p} name={members.nameOf(p)} photoUrl={members.get(p).avatarUrl} color={members.colorOf(p)} size={24} />)}
@@ -564,6 +616,11 @@ function ShowManager() {
               <button onClick={handleDeleteShow} className="p-2 text-red-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
                 <i className="fas fa-trash text-sm" />
               </button>
+              {isMobile && (
+                <button onClick={closeMobileDetail} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors" title="Close">
+                  <i className="fas fa-times text-sm" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -642,17 +699,40 @@ function ShowManager() {
 
       {/* Show not found */}
       {!showEditMode && selectedShowId && !selectedShow && (
-        <EmptyState icon="fa-circle-question" message="Show not found" />
+        <div className="flex-1 flex flex-col min-h-0">
+          {isMobile && (
+            <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex justify-end">
+              <button onClick={closeMobileDetail} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors" title="Close">
+                <i className="fas fa-times text-sm" />
+              </button>
+            </div>
+          )}
+          <EmptyState icon="fa-circle-question" message="Show not found" />
+        </div>
       )}
     </div>
   );
 
   return (
-    <AdminShell activeApp="shows">
-      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
-        {leftPanel}
-        {rightPanel}
-      </div>
+    <AdminShell activeApp="shows" hideDrawerToggle={isMobile}>
+      {isMobile ? (
+        <>
+          {/* Mobile: the show list is the primary view */}
+          {leftPanel}
+          {/* Fullscreen "L2" view/edit — closed with the X in its header */}
+          {(selectedShowId || showEditMode) && (
+            <div className="fixed inset-0 z-50 bg-[#121212] flex flex-col">
+              {rightPanel}
+            </div>
+          )}
+        </>
+      ) : (
+        /* Desktop: two-column layout */
+        <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+          {leftPanel}
+          {rightPanel}
+        </div>
+      )}
     </AdminShell>
   );
 }

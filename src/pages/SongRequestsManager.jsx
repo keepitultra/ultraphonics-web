@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import AuthGuard from '../components/AuthGuard.jsx';
-import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
+import AdminShell from '../components/admin/AdminShell.jsx';
 import { subscribeToSongRequests, dismissSongRequest } from '../firestore-service.js';
 import { playChime } from '../utils/chime.js';
 
@@ -33,7 +33,6 @@ function formatTime(iso) {
 }
 
 function RequestsContent() {
-  const { open, toggle } = useAdminDrawer();
   const [requests, setRequests] = useState([]);
   const [showAll, setShowAll] = useState(false);
   const prevPendingCount = useRef(null);
@@ -54,7 +53,7 @@ function RequestsContent() {
   const displayed = showAll ? requests : pending;
 
   return (
-    <AdminShell activeApp="requests">
+    <AdminShell activeApp="requests" hideDrawerToggle>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 
         {/* Toolbar */}

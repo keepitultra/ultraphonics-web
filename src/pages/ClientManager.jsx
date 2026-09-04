@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useIsMobile } from '../utils/useIsMobile.js';
 import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
@@ -19,6 +20,8 @@ const STATUS_COLORS = {
 };
 const LOG_ICONS = { note: 'fa-note-sticky', call: 'fa-phone', email: 'fa-envelope', meeting: 'fa-handshake', quote: 'fa-file-invoice-dollar', show: 'fa-music' };
 const LOG_COLORS = { note: '#888', call: '#22c55e', email: '#3b82f6', meeting: '#a78bfa', quote: '#f59e0b', show: '#00ddde' };
+const STATUS_FILTERS = ['All', 'Lead', 'Active', 'Past', 'Do Not Book'];
+const ALL_FILTER_COLOR = { bg: '#00ddde', text: '#99f6f6', border: '#00a8a9' };
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -33,6 +36,22 @@ function StatusBadge({ status }) {
     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border" style={{ background: `${c.bg}30`, color: c.text, borderColor: c.border }}>
       {status}
     </span>
+  );
+}
+
+function StatusFilterChip({ status, active, onClick }) {
+  const c = status === 'All' ? ALL_FILTER_COLOR : (STATUS_COLORS[status] || STATUS_COLORS.Past);
+  return (
+    <button
+      onClick={onClick}
+      className="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors"
+      style={active
+        ? { background: `${c.bg}25`, color: c.text, borderColor: c.border }
+        : { background: 'transparent', color: '#666', borderColor: '#2a2a2a' }
+      }
+    >
+      {status}
+    </button>
   );
 }
 
@@ -75,6 +94,7 @@ function ClientManager() {
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
   const { data: clients = [] } = useClients();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
 
   const selectedClientId = searchParams.get('client') || null;
 
@@ -83,6 +103,8 @@ function ClientManager() {
   const [clientStatusFilter, setClientStatusFilter] = useState(() => localStorage.getItem('cm_clientStatus') ?? 'Active');
   const [clientTypeFilter, setClientTypeFilter] = useState('All');
   const [clientSort, setClientSort] = useState('Name A-Z');
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const hasExtraFilters = clientTypeFilter !== 'All' || clientSort !== 'Name A-Z';
 
   // Right panel state
   const [clientDetailTab, setClientDetailTab] = useState('profile');
@@ -122,6 +144,11 @@ function ClientManager() {
     closeDrawer();
   }
 
+  // Closes the mobile fullscreen detail view, back to the client list.
+  function closeMobileDetail() {
+    setSearchParams({}, { replace: true });
+  }
+
   // ── Client filtering ───────────────────────────────────────────────────
   const filteredClients = clients
     .filter(c => {
@@ -159,29 +186,79 @@ function ClientManager() {
 
   // ── Left panel ──────────────────────────────────────────────────────────
   const leftPanel = (
-    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`}>
+    <div className={isMobile
+      ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[#1a1a1a]'
+      : `admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a]${drawerOpen ? ' drawer-open' : ''}`
+    }>
       {/* Client controls */}
-      <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2">
+      <div className="shrink-0 p-3 border-b border-[#2a2a2a] space-y-2.5">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#555] text-xs pointer-events-none" />
-            <input type="text" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Search..." className="w-full pl-8 pr-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs placeholder-[#555] focus:outline-none focus:border-[#00ddde]" />
+            <input
+              type="text"
+              value={clientSearch}
+              onChange={e => setClientSearch(e.target.value)}
+              placeholder="Search clients..."
+              className="w-full pl-8 pr-8 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs placeholder-[#555] focus:outline-none focus:border-[#00ddde]"
+            />
+            {clientSearch && (
+              <button
+                onClick={() => setClientSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-[#555] hover:text-white transition-colors"
+                title="Clear search"
+              >
+                <i className="fas fa-circle-xmark text-xs" />
+              </button>
+            )}
           </div>
-          <button onClick={() => setClientFormOpen(true)} className="shrink-0 px-3 py-2 bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-xs font-semibold transition-colors">
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setFilterPanelOpen(v => !v)}
+              className={`relative w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${
+                filterPanelOpen ? 'bg-[#00ddde]/10 border-[#00ddde]/40 text-[#00ddde]' : 'bg-[#121212] border-[#2a2a2a] text-[#888] hover:text-white'
+              }`}
+              title="Type & sort"
+            >
+              <i className="fas fa-sliders text-xs" />
+              {hasExtraFilters && (
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#00ddde]" />
+              )}
+            </button>
+            {filterPanelOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setFilterPanelOpen(false)} />
+                <div className="absolute right-0 top-full mt-1.5 z-40 w-52 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl p-3 space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#555] mb-1.5">Type</label>
+                    <select value={clientTypeFilter} onChange={e => setClientTypeFilter(e.target.value)} className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs focus:outline-none focus:border-[#00ddde]">
+                      {['All','Venue','Planner','Private','Corporate'].map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#555] mb-1.5">Sort</label>
+                    <select value={clientSort} onChange={e => setClientSort(e.target.value)} className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-white text-xs focus:outline-none focus:border-[#00ddde]">
+                      {['Name A-Z','Name Z-A','Last Contact','Last Updated'].map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={() => setClientFormOpen(true)} className="shrink-0 w-9 h-9 flex items-center justify-center bg-[#008c8d] hover:bg-[#00a8a9] text-white rounded-lg text-xs font-semibold transition-colors" title="New client">
             <i className="fas fa-plus" />
           </button>
         </div>
-        <div className="flex gap-2">
-          <select value={clientStatusFilter} onChange={e => { setClientStatusFilter(e.target.value); localStorage.setItem('cm_clientStatus', e.target.value); }} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-            {['All','Lead','Active','Past','Do Not Book'].map(s => <option key={s}>{s}</option>)}
-          </select>
-          <select value={clientTypeFilter} onChange={e => setClientTypeFilter(e.target.value)} className="flex-1 px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-            {['All','Venue','Planner','Private','Corporate'].map(t => <option key={t}>{t}</option>)}
-          </select>
+        <div className="flex flex-wrap gap-1.5">
+          {STATUS_FILTERS.map(s => (
+            <StatusFilterChip
+              key={s}
+              status={s}
+              active={clientStatusFilter === s}
+              onClick={() => { setClientStatusFilter(s); localStorage.setItem('cm_clientStatus', s); }}
+            />
+          ))}
         </div>
-        <select value={clientSort} onChange={e => setClientSort(e.target.value)} className="w-full px-2 py-1.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-[#888] text-xs focus:outline-none focus:border-[#00ddde]">
-          {['Name A-Z','Name Z-A','Last Contact','Last Updated'].map(s => <option key={s}>{s}</option>)}
-        </select>
       </div>
 
       {/* Client list */}
@@ -217,7 +294,7 @@ function ClientManager() {
 
   // ── Right panel ────────────────────────────────────────────────────────
   const rightPanel = (
-    <div className="flex flex-col overflow-hidden bg-[#121212]">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[#121212]">
       {!selectedClientId && (
         <div className="flex-1 flex items-center justify-center h-full">
           <div className="text-center">
@@ -237,14 +314,14 @@ function ClientManager() {
           <div className="shrink-0 px-5 py-3.5 border-b border-[#2a2a2a] flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-bold text-white truncate">{selectedClient.name}</h2>
+                <div className="text-base font-bold text-white truncate">{selectedClient.name}</div>
                 <StatusBadge status={selectedClient.status || 'Active'} />
               </div>
               {selectedClient.type && <p className="text-xs text-[#888]">{selectedClient.type}</p>}
             </div>
             <div className="shrink-0 flex items-center gap-1">
-              <button onClick={() => navigate(`/shows?show=new&clientId=${selectedClient.id}`)} className="px-3 py-1.5 bg-[#008c8d]/20 border border-[#008c8d]/40 text-[#00ddde] rounded-lg text-xs font-semibold hover:bg-[#008c8d]/30 transition-colors">
-                <i className="fas fa-plus mr-1" />Show
+              <button onClick={() => navigate(`/shows?show=new&clientId=${selectedClient.id}`)} title="New show" className="px-3 py-1.5 bg-[#008c8d]/20 border border-[#008c8d]/40 text-[#00ddde] rounded-lg text-xs font-semibold hover:bg-[#008c8d]/30 transition-colors">
+                <i className="fas fa-plus sm:mr-1" /><span className="hidden sm:inline">Show</span>
               </button>
               <button onClick={() => { setEditingClient(selectedClient); setClientFormOpen(true); }} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors">
                 <i className="fas fa-pen text-sm" />
@@ -252,16 +329,21 @@ function ClientManager() {
               <button onClick={handleDeleteClient} className="p-2 text-red-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
                 <i className="fas fa-trash text-sm" />
               </button>
+              {isMobile && (
+                <button onClick={closeMobileDetail} className="p-2 text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors" title="Close">
+                  <i className="fas fa-times text-sm" />
+                </button>
+              )}
             </div>
           </div>
 
           {/* Client tabs */}
-          <div className="shrink-0 flex border-b border-[#2a2a2a]">
+          <div className="shrink-0 flex overflow-x-auto border-b border-[#2a2a2a]">
             {['profile','shows','financials','activity'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setClientDetailTab(tab)}
-                className={`px-5 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors capitalize ${
+                className={`shrink-0 whitespace-nowrap px-5 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors capitalize ${
                   clientDetailTab === tab ? 'text-[#00ddde] border-b-2 border-[#00ddde]' : 'text-[#888] hover:text-white'
                 }`}
               >
@@ -296,11 +378,25 @@ function ClientManager() {
   );
 
   return (
-    <AdminShell activeApp="clients">
-      <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
-        {leftPanel}
-        {rightPanel}
-      </div>
+    <AdminShell activeApp="clients" hideDrawerToggle={isMobile}>
+      {isMobile ? (
+        <>
+          {/* Mobile: the client list is the primary view */}
+          {leftPanel}
+          {/* Fullscreen "L2" view — closed with the X in its header */}
+          {selectedClientId && (
+            <div className="fixed inset-0 z-50 bg-[#121212] flex flex-col">
+              {rightPanel}
+            </div>
+          )}
+        </>
+      ) : (
+        /* Desktop: two-column layout */
+        <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+          {leftPanel}
+          {rightPanel}
+        </div>
+      )}
 
       {/* Client form modal */}
       {clientFormOpen && (
