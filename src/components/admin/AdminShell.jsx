@@ -44,8 +44,8 @@ const APPS = [
   { id: 'requests',  label: 'Requests',  path: '/requests',  icon: 'fa-hand-point-up',  color: '#f59e0b' },
 ];
 
-/** @param {{ activeApp: string, children: import('react').ReactNode }} props */
-export default function AdminShell({ activeApp, children }) {
+/** @param {{ activeApp: string, children: import('react').ReactNode, hideDrawerToggle?: boolean }} props */
+export default function AdminShell({ activeApp, children, hideDrawerToggle = false }) {
   const { open: drawerOpen, toggle, close } = useAdminDrawer();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [appSheetOpen, setAppSheetOpen] = useState(false);
@@ -92,14 +92,19 @@ export default function AdminShell({ activeApp, children }) {
       {/* Top nav */}
       <nav className="shrink-0 bg-[#1a1a1a] border-b border-[#2a2a2a] z-40">
         <div className="flex items-center h-12 px-4 gap-4">
-          {/* Hamburger — mobile only */}
-          <button
-            onClick={toggle}
-            className="md:hidden p-2 -ml-2 text-[#888] hover:text-white rounded-md hover:bg-white/5 transition-colors"
-            title="Toggle menu"
-          >
-            <i className="fas fa-bars text-sm" />
-          </button>
+          {/* Hamburger — mobile only, and only for pages that actually use the
+              drawer (see useAdminDrawer). Calendar has no drawer content on
+              mobile — see BandCalendar.jsx — so it opts out via hideDrawerToggle
+              rather than showing a button that toggles nothing. */}
+          {!hideDrawerToggle && (
+            <button
+              onClick={toggle}
+              className="md:hidden p-2 -ml-2 text-[#888] hover:text-white rounded-md hover:bg-white/5 transition-colors"
+              title="Toggle menu"
+            >
+              <i className="fas fa-bars text-sm" />
+            </button>
+          )}
 
           {/* Logo / back to admin */}
           <Link

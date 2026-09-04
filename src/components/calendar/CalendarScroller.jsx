@@ -15,7 +15,7 @@ import MonthGrid from './MonthGrid.jsx';
  * a layout effect, before paint.
  *
  * @param {{
- *   months: string[], members: Array, availabilityByMonth: Map<string, Map<string,object>>,
+ *   months: string[], initialMonth?: string, members: Array, availabilityByMonth: Map<string, Map<string,object>>,
  *   showsByDate: Map<string,Array>, eventsByDate: Map<string,Array>,
  *   selectedDate: string, onSelectDate: (d:string)=>void, todayKey: string,
  *   onNeedPast?: () => void, onNeedFuture?: () => void,
@@ -23,7 +23,7 @@ import MonthGrid from './MonthGrid.jsx';
  */
 const CalendarScroller = forwardRef(function CalendarScroller(props, ref) {
   const {
-    months, members, availabilityByMonth, showsByDate, eventsByDate,
+    months, initialMonth, members, availabilityByMonth, showsByDate, eventsByDate,
     selectedDate, onSelectDate, todayKey, onNeedPast, onNeedFuture,
   } = props;
 
@@ -42,6 +42,16 @@ const CalendarScroller = forwardRef(function CalendarScroller(props, ref) {
       if (el) el.scrollIntoView({ block: 'start', behavior: opts.smooth ? 'smooth' : 'auto' });
     },
   }));
+
+  // Land on today's (or a deep-linked date's) month before first paint —
+  // without this the page loads scrolled to rangeStart, two months early,
+  // and the user has to manually scroll down just to see "now".
+  useLayoutEffect(() => {
+    if (!initialMonth) return;
+    const el = monthNodeRefs.current.get(initialMonth);
+    if (el) el.scrollIntoView({ block: 'start', behavior: 'auto' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const root = scrollerRef.current;

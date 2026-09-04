@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
-import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
+import AdminShell from '../components/admin/AdminShell.jsx';
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
 import { useMembersWithAccounts, useShows, useBandEvents, useAvailability, useQuotes, useIsAdmin } from '../firebase/useFirestore.js';
@@ -19,6 +19,7 @@ import SyncCard from '../components/calendar/SyncCard.jsx';
 export const CALENDAR_ACCENT = '#14b8a6';
 
 const MAX_RENDERED_MONTHS = 48;
+const MOBILE_QUERY = '(max-width: 767px)';
 
 const EVENT_TYPE_COLOR = {
   rehearsal: '#14b8a6',
@@ -43,10 +44,27 @@ function monthCount(startMonth, endMonth) {
   return n;
 }
 
+/** Tracks a CSS breakpoint via matchMedia — same 767px cutoff as the
+ * .admin-drawer mobile-overlay rule in assets/css/styles.css, since this page
+ * doesn't use that drawer system (see leftPanel below) and needs its own
+ * mobile/desktop split in JS to decide whether a day tap opens a modal. */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const handler = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isMobile;
+}
+
 function Legend() {
   const items = ['available', 'maybe', 'unavailable', 'unknown'];
   return (
-    <div className="flex items-center gap-3 px-3 py-2 border-b border-[#2a2a2a] flex-wrap">
+    <div className="shrink-0 flex items-center gap-3 px-3 py-2 border-b border-[#2a2a2a] flex-wrap">
       {items.map(key => {
         const meta = STATE_META[key];
         return (
@@ -56,6 +74,79 @@ function Legend() {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The "⋯" overflow — houses the controls that are useful but not worth
+ * permanent toolbar real estate: jumping to an arbitrary year, filtering the
+ * grid to one member, and opening the range-marking modal. Closes on an
+ * outside click, same pattern as AdminShell's app-switcher dropdown.
+ */
+function OverflowMenu({
+  yearOptions, onJumpToYear, memberFilter, onChangeMemberFilter, members, canEdit, onOpenMarkModal,
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function handleOutsideClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [open]);
+
+  const SELECT = 'w-full px-2 py-1.5 rounded-lg text-sm bg-[#121212] border border-[#2a2a2a] text-[#ccc]';
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title="More"
+        className="px-3 py-2 rounded-lg text-[#888] border border-[#2a2a2a] hover:text-white hover:border-[#3a3a3a] transition-colors"
+      >
+        <i className="fas fa-ellipsis-vertical text-sm" />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-2 z-50 w-64 rounded-xl overflow-hidden shadow-2xl p-3 space-y-3 text-left"
+          style={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
+        >
+          <div>
+            <label className="block text-[10px] text-[#666] uppercase tracking-wider font-semibold mb-1">Jump to year</label>
+            <select
+              onChange={e => { onJumpToYear(Number(e.target.value)); setOpen(false); }}
+              defaultValue=""
+              className={SELECT}
+            >
+              <option value="" disabled>Choose a year…</option>
+              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] text-[#666] uppercase tracking-wider font-semibold mb-1">Filter</label>
+            <select value={memberFilter} onChange={e => onChangeMemberFilter(e.target.value)} className={SELECT}>
+              <option value="all">All members</option>
+              {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          {canEdit && (
+            <>
+              <div className="h-px bg-[#2a2a2a]" />
+              <button
+                onClick={() => { setOpen(false); onOpenMarkModal(); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm font-medium text-[#ccc] hover:bg-white/5 transition-colors"
+              >
+                <i className="fas fa-calendar-check text-xs" style={{ color: CALENDAR_ACCENT }} />
+                Mark availability
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -212,6 +303,30 @@ function DayDetailPanel({
   );
 }
 
+/** Mobile-only day detail: the drawer sidebar doesn't render below 768px (see
+ * leftPanel), so a tapped day surfaces the same DayDetailPanel content here
+ * instead — a bottom sheet on phones, matching the house modal chrome used by
+ * BandEventModal/RangeMarkBar/SyncCard. */
+function DayDetailModal({ open, onClose, ...panelProps }) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-t-2xl sm:rounded-xl w-full sm:max-w-md sm:m-4 max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="shrink-0 flex items-center justify-end px-3 pt-2">
+          <button onClick={onClose} className="text-[#666] hover:text-white text-xl leading-none p-1">&times;</button>
+        </div>
+        <DayDetailPanel {...panelProps} />
+      </div>
+    </div>
+  );
+}
+
 function BandCalendarContent() {
   const { user } = useAuth();
   const memberIndex = useMembersWithAccounts();
@@ -219,15 +334,33 @@ function BandCalendarContent() {
   const { data: shows = [] } = useShows();
   const { data: bandEvents = [] } = useBandEvents();
   const { isAdmin } = useIsAdmin();
-  const { open: drawerOpen } = useAdminDrawer();
+  const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const todayKey = toDateKey(new Date());
   const todayMonth = monthOf(todayKey);
-  const selectedDate = searchParams.get('date') || todayKey;
+
+  // selectedDate is local state, not derived straight from searchParams: an
+  // earlier version read it live from the URL, and setSearchParams() (which
+  // goes through the router's own navigate()) doesn't always land in the same
+  // commit as the rest of the click handler's state updates — a day tap could
+  // paint one frame with the old date/availability before the URL caught up
+  // and everything "clicked into place". Local state updates synchronously
+  // with dayModalOpen instead; the URL is kept as a mirror (for deep links
+  // like QuoteManager's "Open in Calendar") via the effect below, not as the
+  // source of truth the UI renders from.
+  const [selectedDate, setSelectedDate] = useState(() => searchParams.get('date') || todayKey);
+  useEffect(() => {
+    const urlDate = searchParams.get('date');
+    if (urlDate && urlDate !== selectedDate) setSelectedDate(urlDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const [rangeStart, setRangeStart] = useState(() => addMonths(todayMonth, -2));
   const [rangeEnd, setRangeEnd] = useState(() => addMonths(todayMonth, 14));
+  // Fixed at mount — whichever month should be in view on page load (today,
+  // or a deep-linked ?date=). Deliberately not reactive to later clicks.
+  const [initialMonth] = useState(() => monthOf(selectedDate));
   const [pendingScrollTarget, setPendingScrollTarget] = useState(null);
   const [memberFilter, setMemberFilter] = useState('all'); // 'all' | memberId
   const [markingMemberOverride, setMarkingMemberOverride] = useState(null);
@@ -235,6 +368,13 @@ function BandCalendarContent() {
   const [eventModal, setEventModal] = useState(null); // null | { initialDate, event }
   const [markModalOpen, setMarkModalOpen] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [dayModalOpen, setDayModalOpen] = useState(false);
+
+  // If the window is resized/rotated past the breakpoint while the mobile day
+  // sheet is open, don't leave it stranded — it has no desktop equivalent.
+  useEffect(() => {
+    if (!isMobile) setDayModalOpen(false);
+  }, [isMobile]);
 
   const { data: availabilityDocs = [] } = useAvailability(rangeStart, rangeEnd);
   const { data: quotes = [] } = useQuotes();
@@ -320,12 +460,16 @@ function BandCalendarContent() {
   const hasSyncedOnce = [...ownMemberDocsByMonth.values()].some(d => d.syncedAt);
 
   const handleSelectDate = useCallback((dateKey) => {
+    setSelectedDate(dateKey);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.set('date', dateKey);
       return next;
     }, { replace: true });
-  }, [setSearchParams]);
+    // Desktop keeps the static sidebar in view at all times; mobile has no
+    // sidebar at all (see leftPanel), so a tap needs to surface details itself.
+    if (isMobile) setDayModalOpen(true);
+  }, [setSearchParams, isMobile]);
 
   const extendPast = useCallback(() => {
     setRangeStart(prev => {
@@ -379,86 +523,76 @@ function BandCalendarContent() {
   const thisYear = new Date().getFullYear();
   for (let y = thisYear - 2; y <= thisYear + 3; y++) yearOptions.push(y);
 
+  const dayDetailProps = {
+    dateKey: selectedDate,
+    shows: showsByDate.get(selectedDate) || [],
+    events: eventsByDate.get(selectedDate) || [],
+    quotes: quotesByDate.get(selectedDate) || [],
+    members: bandMembers,
+    memberIndex,
+    docsByMemberForMonth: docsByMemberForSelectedMonth,
+    canEdit,
+    markingMember: bandMembers.find(m => m.id === markingMemberId) || null,
+    onSetDay: handleSetDay,
+    settingDay,
+    onEditEvent: e => setEventModal({ initialDate: e.date, event: e }),
+  };
+
+  // Desktop-only static sidebar — deliberately not the shared .admin-drawer
+  // mobile-overlay system (compare ShowManager/QuoteManager): on a phone this
+  // page has no side panel at all, a tapped day opens DayDetailModal instead.
   const leftPanel = (
-    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left${drawerOpen ? ' drawer-open' : ''}`}>
-      <div className="shrink-0 p-3 border-b border-[#2a2a2a] flex items-center gap-2">
-        <button
-          onClick={() => setSyncModalOpen(true)}
-          className="flex-1 min-w-0 px-3 py-2 rounded-lg text-xs font-semibold truncate transition-colors relative"
-          style={{ background: `${CALENDAR_ACCENT}18`, color: CALENDAR_ACCENT, border: `1px solid ${CALENDAR_ACCENT}40` }}
-        >
-          <i className="fab fa-google mr-1.5" />Sync Google Calendar
-          {hasSyncedOnce && (
-            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#14b8a6]" />
-          )}
-        </button>
-        {canEdit && (
-          <button
-            onClick={() => setMarkModalOpen(true)}
-            title="Mark availability"
-            className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-[#888] border border-[#2a2a2a] hover:text-white hover:border-[#3a3a3a] transition-colors"
-          >
-            <i className="fas fa-calendar-check" />
-          </button>
-        )}
-      </div>
-      <Legend />
-      <DayDetailPanel
-        dateKey={selectedDate}
-        shows={showsByDate.get(selectedDate) || []}
-        events={eventsByDate.get(selectedDate) || []}
-        quotes={quotesByDate.get(selectedDate) || []}
-        members={bandMembers}
-        memberIndex={memberIndex}
-        docsByMemberForMonth={docsByMemberForSelectedMonth}
-        canEdit={canEdit}
-        markingMember={bandMembers.find(m => m.id === markingMemberId) || null}
-        onSetDay={handleSetDay}
-        settingDay={settingDay}
-        onEditEvent={e => setEventModal({ initialDate: e.date, event: e })}
-      />
+    <div className="hidden md:flex md:flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left">
+      <DayDetailPanel {...dayDetailProps} />
     </div>
   );
 
   const rightPanel = (
     <div className="flex flex-col min-h-0 overflow-hidden">
-      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-[#2a2a2a] flex-wrap">
+      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-[#2a2a2a]">
         <button
           onClick={goToToday}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          className="shrink-0 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
           style={{ background: `${CALENDAR_ACCENT}26`, color: CALENDAR_ACCENT }}
         >
           Today
         </button>
-        <select
-          onChange={e => jumpToYear(Number(e.target.value))}
-          defaultValue=""
-          className="px-2 py-1.5 rounded-lg text-sm bg-[#1e1e1e] border border-[#2a2a2a] text-[#ccc]"
+        <div className="flex-1" />
+        <button
+          onClick={() => setSyncModalOpen(true)}
+          title="Sync Google Calendar"
+          className="shrink-0 px-3 py-2 rounded-lg text-sm font-semibold transition-colors relative"
+          style={{ background: `${CALENDAR_ACCENT}18`, color: CALENDAR_ACCENT, border: `1px solid ${CALENDAR_ACCENT}40` }}
         >
-          <option value="" disabled>Jump to year…</option>
-          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select
-          value={memberFilter}
-          onChange={e => setMemberFilter(e.target.value)}
-          className="px-2 py-1.5 rounded-lg text-sm bg-[#1e1e1e] border border-[#2a2a2a] text-[#ccc]"
-        >
-          <option value="all">All members</option>
-          {bandMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+          <i className="fab fa-google mr-1.5" />Sync
+          {hasSyncedOnce && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#14b8a6]" />
+          )}
+        </button>
         <button
           onClick={() => setEventModal({ initialDate: selectedDate, event: null })}
-          className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium text-[#888] border border-[#2a2a2a] hover:text-white hover:border-[#3a3a3a] transition-colors"
+          className="shrink-0 px-3 py-2 rounded-lg text-sm font-medium text-[#888] border border-[#2a2a2a] hover:text-white hover:border-[#3a3a3a] transition-colors"
         >
           <i className="fas fa-plus text-xs mr-1.5" />Event
         </button>
+        <OverflowMenu
+          yearOptions={yearOptions}
+          onJumpToYear={jumpToYear}
+          memberFilter={memberFilter}
+          onChangeMemberFilter={setMemberFilter}
+          members={bandMembers}
+          canEdit={canEdit}
+          onOpenMarkModal={() => setMarkModalOpen(true)}
+        />
       </div>
+      <Legend />
       {membersLoading ? (
         <div className="flex-1 flex items-center justify-center text-[#555]">Loading…</div>
       ) : (
         <CalendarScroller
           ref={scrollerRef}
           months={months}
+          initialMonth={initialMonth}
           members={visibleMembers}
           availabilityByMonth={availabilityByMonth}
           showsByDate={showsByDate}
@@ -474,7 +608,7 @@ function BandCalendarContent() {
   );
 
   return (
-    <AdminShell activeApp="calendar">
+    <AdminShell activeApp="calendar" hideDrawerToggle>
       <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
         {leftPanel}
         {rightPanel}
@@ -510,6 +644,7 @@ function BandCalendarContent() {
           syncedDocsByMonth={ownMemberDocsByMonth}
         />
       )}
+      <DayDetailModal open={dayModalOpen} onClose={() => setDayModalOpen(false)} {...dayDetailProps} />
     </AdminShell>
   );
 }
