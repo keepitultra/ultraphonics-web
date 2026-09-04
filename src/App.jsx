@@ -26,12 +26,13 @@ import ShowManager from './pages/ShowManager.jsx';
 import BandCalendar from './pages/BandCalendar.jsx';
 import SongRequestsManager from './pages/SongRequestsManager.jsx';
 import MemberManager from './pages/MemberManager.jsx';
+import PhotoGallery from './pages/PhotoGallery.jsx';
 import QuoteManager from './pages/QuoteManager.jsx';
 import ThankYou from './pages/ThankYou.jsx';
 import BandIndex from './pages/BandIndex.jsx';
 import MemberProfile from './pages/MemberProfile.jsx';
 
-const APP_ROUTES = ['/setlists', '/songs', '/clients', '/shows', '/calendar', '/events', '/requests', '/request', '/members', '/quotes'];
+const APP_ROUTES = ['/setlists', '/songs', '/clients', '/shows', '/calendar', '/events', '/requests', '/request', '/members', '/quotes', '/gallery'];
 
 function PublicLayout() {
   const { pathname } = useLocation();
@@ -74,6 +75,7 @@ function PublicLayout() {
         <Route path="/shows" element={<AdminDrawerProvider><ShowManager /></AdminDrawerProvider>} />
         <Route path="/calendar" element={<AdminDrawerProvider><BandCalendar /></AdminDrawerProvider>} />
         <Route path="/members" element={<AdminDrawerProvider><MemberManager /></AdminDrawerProvider>} />
+        <Route path="/gallery" element={<AdminDrawerProvider><PhotoGallery /></AdminDrawerProvider>} />
         <Route path="/quotes" element={<AdminDrawerProvider><QuoteManager /></AdminDrawerProvider>} />
         <Route path="/requests" element={<AdminDrawerProvider><SongRequestsManager /></AdminDrawerProvider>} />
       </Routes>

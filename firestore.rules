@@ -182,6 +182,22 @@ service cloud.firestore {
       allow write: if isAdmin() || (isAllowedUser() && ownsMember(memberId));
     }
 
+    // ── Shared photo gallery ────────────────────────────────────────────
+    // Admin-uploaded, admin-curated. The full collection is allowlisted
+    // (upload/tag/delete are admin actions); only photos flagged
+    // featuredForWebsite are visible to anonymous marketing-site visitors —
+    // same posture as memberProfiles.published above. Write trust matches
+    // shows/songs/setlists (any allowlisted member, no per-field validation)
+    // since every writer here is already an authenticated band member, not a
+    // public form like quotes.
+    match /galleryPhotos/{photoId} {
+      allow read: if resource.data.featuredForWebsite == true || isAllowedUser();
+      // request.resource is null on delete, so that case can't share the
+      // id-matches-docId check with create/update — split out or it errors.
+      allow create, update: if isAllowedUser() && request.resource.data.id == photoId;
+      allow delete: if isAllowedUser();
+    }
+
     // ── Band availability ────────────────────────────────────────────────
     // One doc per member per month: availability/{memberId}__{YYYY-MM}. The
     // doc id is the authorisation key, not decoration — re-deriving it from

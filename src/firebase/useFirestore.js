@@ -24,6 +24,8 @@ import {
   subscribeToAvailabilityRange,
   subscribeToAvailabilityMonth,
   subscribeToBandEvents,
+  subscribeToGalleryPhotos,
+  subscribeToFeaturedGalleryPhotos,
 } from '../firestore-service.js';
 
 // ── Generic real-time subscription hook ─────────────────────
@@ -283,4 +285,33 @@ export function useAvailabilityMonth(month) {
  */
 export function useBandEvents() {
   return useSubscription(subscribeToBandEvents);
+}
+
+/**
+ * Every gallery photo, newest first (admin only — reads the whole collection,
+ * which the security rule only permits for an allowlisted user).
+ */
+export function useGalleryPhotos() {
+  const { data, loading, error } = useSubscription(subscribeToGalleryPhotos);
+  const photos = useMemo(
+    () => [...data].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')),
+    [data],
+  );
+  return { photos, loading, error };
+}
+
+/**
+ * Photos curated for the public website, ordered for display. Public-safe —
+ * the underlying query is filtered to featuredForWebsite == true, which is
+ * the only slice of this collection an anonymous visitor may read.
+ */
+export function useFeaturedGalleryPhotos() {
+  const { data, loading, error } = useSubscription(subscribeToFeaturedGalleryPhotos);
+  const photos = useMemo(
+    () => [...data].sort((a, b) =>
+      (a.featuredOrder ?? 999) - (b.featuredOrder ?? 999)
+      || (b.createdAt || '').localeCompare(a.createdAt || '')),
+    [data],
+  );
+  return { photos, loading, error };
 }

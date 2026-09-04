@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { config } from '../config.js';
-import { useSongs } from '../firebase/useFirestore.js';
+import { useSongs, useFeaturedGalleryPhotos } from '../firebase/useFirestore.js';
+import { cloudinaryThumbUrl } from '../utils/cloudinaryUpload.js';
 import { GENRE_COLORS, genreLabel } from '../utils/genre.js';
 
-const galleryImages = [
+// Fallback shown while the gallery is empty (not yet migrated / nothing
+// featured yet) so this section never renders blank.
+const FALLBACK_GALLERY_IMAGES = [
   { src: '/images/UltraphonicsLivePromoPic1.jpg', alt: 'Ultraphonics Live 1' },
   { src: '/images/UltraphonicsLivePromoPic2.jpg', alt: 'Ultraphonics Live 2' },
   { src: '/images/UltraphonicsLivePromoPic3.png', alt: 'Ultraphonics Live 3' },
@@ -25,7 +28,15 @@ const GENRE_ORDER = ['Rock', 'Pop', 'Soul', 'Country', 'Other'];
 
 export default function MediaKit() {
   const { data: allSongs = [] } = useSongs();
+  const { photos: featuredPhotos } = useFeaturedGalleryPhotos();
   const [sortBy, setSortBy] = useState('title');
+
+  const galleryImages = featuredPhotos.length > 0
+    ? featuredPhotos.map(p => ({
+        src: cloudinaryThumbUrl(p.publicId, { width: 800, height: 800 }),
+        alt: p.caption || 'Ultraphonics Live',
+      }))
+    : FALLBACK_GALLERY_IMAGES;
 
   const songs = useMemo(() => {
     const base = allSongs.filter(isValidSong);

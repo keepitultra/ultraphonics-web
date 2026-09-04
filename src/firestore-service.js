@@ -34,7 +34,8 @@ const COLLECTIONS = {
   MEMBERS: 'members',
   MEMBER_PROFILES: 'memberProfiles',
   AVAILABILITY: 'availability',
-  BAND_EVENTS: 'bandEvents'
+  BAND_EVENTS: 'bandEvents',
+  GALLERY_PHOTOS: 'galleryPhotos'
 };
 
 // Site-wide settings live in a single document so the public pages need exactly
@@ -926,6 +927,74 @@ export async function saveBandEvent(event) {
 
 export async function deleteBandEvent(eventId) {
   await deleteDoc(doc(db, COLLECTIONS.BAND_EVENTS, eventId));
+}
+
+// ============= GALLERY PHOTOS =============
+// Shared upload gallery, backed by Cloudinary (see src/utils/cloudinaryUpload.js)
+// for the actual image files — Firestore only ever holds the resulting URL and
+// metadata, the same pattern already used for chartUrl/avatarUrl. Doc id is a
+// normal Firestore auto-id, NOT the Cloudinary public_id: uploads are made
+// into a folder (see cloudinary-config.js), so Cloudinary returns public_ids
+// like "ultraphonics/gallery/abc123" — using that directly as a doc id would
+// nest the write under galleryPhotos/ultraphonics/gallery/abc123 instead of a
+// flat galleryPhotos/{id} doc, which the security rule below never matches
+// and Firestore silently denies.
+
+/** Every gallery photo (admin — full collection, published or not "featured"). */
+export function subscribeToGalleryPhotos(callback, onError) {
+  return onSnapshot(
+    collection(db, COLLECTIONS.GALLERY_PHOTOS),
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Photos curated for the public website only. The filter is required, not an
+ * optimisation: the security rule only permits an anonymous read of documents
+ * where featuredForWebsite == true, so an unfiltered query would be rejected.
+ */
+export function subscribeToFeaturedGalleryPhotos(callback, onError) {
+  return onSnapshot(
+    query(collection(db, COLLECTIONS.GALLERY_PHOTOS), where('featuredForWebsite', '==', true)),
+    snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    err => { if (onError) onError(err); },
+  );
+}
+
+/**
+ * Create a new gallery photo doc for a just-uploaded Cloudinary asset.
+ * @param {Object} data - { url, publicId, width, height, caption, uploadedBy, linkedShowId, featuredForWebsite }
+ * @returns {Promise<string>} the new photo's Firestore doc id
+ */
+export async function createGalleryPhoto(data) {
+  const ref = doc(collection(db, COLLECTIONS.GALLERY_PHOTOS));
+  const now = new Date().toISOString();
+  await setDoc(ref, { ...data, id: ref.id, createdAt: now, updatedAt: now });
+  return ref.id;
+}
+
+/**
+ * Patch an existing gallery photo (caption, feature-toggle, linked show).
+ * Merges, so a caller only sends the field that changed.
+ * @param {string} photoId - Firestore doc id (from useGalleryPhotos()/photo.id)
+ * @param {Object} data
+ */
+export async function saveGalleryPhoto(photoId, data) {
+  await setDoc(
+    doc(db, COLLECTIONS.GALLERY_PHOTOS, photoId),
+    { ...data, id: photoId, updatedAt: new Date().toISOString() },
+    { merge: true },
+  );
+}
+
+/**
+ * Remove a photo from the gallery. Firestore doc only — Cloudinary has no
+ * unsigned deletion API, so the underlying asset is left in the account. See
+ * the plan's "orphaned Cloudinary assets" risk note.
+ */
+export async function deleteGalleryPhoto(photoId) {
+  await deleteDoc(doc(db, COLLECTIONS.GALLERY_PHOTOS, photoId));
 }
 
 export { db, COLLECTIONS };

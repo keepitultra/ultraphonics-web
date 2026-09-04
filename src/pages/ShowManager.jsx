@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
+import PhotoPickerModal from '../components/admin/PhotoPickerModal.jsx';
 import { useShows, useSetlists, useClients, useMembersWithAccounts } from '../firebase/useFirestore.js';
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import { saveShow, deleteShow, saveSetlist, duplicateSetlist } from '../firestore-service.js';
@@ -213,7 +214,7 @@ function ShowManager() {
       eventLink: '', setlistId: '',
       itinerary: '', notes: '',
       personnel: [], eventHandler: '',
-      payout: '',
+      payout: '', coverPhotoUrl: '',
       isPrivate: false, published: false,
     };
     if (clientIdParam) {
@@ -307,7 +308,7 @@ function ShowManager() {
       eventLink: '', setlistId: '',
       itinerary: '', notes: '',
       personnel: [], eventHandler: '',
-      payout: '',
+      payout: '', coverPhotoUrl: '',
       isPrivate: false, published: false,
     };
     setShowForm(defaults);
@@ -872,6 +873,7 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
   const [guestName, setGuestName] = useState('');
   const [guestInstrument, setGuestInstrument] = useState('Guitar');
   const [addingGuest, setAddingGuest] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const activeClients = clients.filter(c => (c.status || 'Active') === 'Active').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const selectedClient = clients.find(c => c.id === form.clientId);
@@ -938,6 +940,38 @@ function ShowEditForm({ form, setField, setFields, clients, setlists, onClientCh
       </FormField>
       <FormField label="Event Link">
         <input type="url" value={form.eventLink || ''} onChange={e => setField('eventLink', e.target.value)} className={INPUT} placeholder="https://..." />
+      </FormField>
+      <FormField label="Cover Photo">
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={form.coverPhotoUrl || ''}
+            onChange={e => setField('coverPhotoUrl', e.target.value)}
+            className={INPUT}
+            placeholder="https://.../photo.jpg"
+          />
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="shrink-0 px-3 py-2 bg-[#121212] border border-[#2a2a2a] rounded-lg text-xs font-semibold text-[#ccc] hover:text-white hover:border-[#a78bfa]/50 transition-colors whitespace-nowrap"
+          >
+            <i className="fas fa-images mr-1.5" />Gallery
+          </button>
+        </div>
+        {form.coverPhotoUrl && (
+          <img
+            src={form.coverPhotoUrl}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="mt-2 w-24 h-24 rounded-xl object-cover border border-[#2a2a2a]"
+            onError={e => { e.currentTarget.style.display = 'none'; }}
+          />
+        )}
+        <PhotoPickerModal
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onSelect={photo => setField('coverPhotoUrl', photo.url)}
+        />
       </FormField>
       <FormField label="Setlist">
         {form.setlistId ? (

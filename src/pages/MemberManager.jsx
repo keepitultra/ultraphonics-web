@@ -3,10 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import AuthGuard from '../components/AuthGuard.jsx';
 import { useAuth } from '../firebase/AuthContext.jsx';
 import AdminShell, { useAdminDrawer } from '../components/admin/AdminShell.jsx';
+import PhotoPickerModal from '../components/admin/PhotoPickerModal.jsx';
 import MemberAvatar from '../components/MemberAvatar.jsx';
 import { useMembersWithAccounts, useMemberProfileDocs, useIsAdmin } from '../firebase/useFirestore.js';
 import { saveBandMember, deleteBandMember, saveMemberProfile } from '../firestore-service.js';
 import { MEMBER_ROLES, slugifyMember, GUEST_COLOR } from '../utils/members.js';
+import { useIsMobile } from '../utils/useIsMobile.js';
 import { THEMES, FONTS, PATTERNS, SOCIAL_PLATFORMS, safeUrl, parseYouTubeId, DEFAULT_THEME, DEFAULT_FONT, DEFAULT_PATTERN } from '../utils/profileThemes.js';
 
 const PALETTE = [
@@ -19,6 +21,7 @@ const INPUT = 'w-full px-3 py-2.5 bg-[#121212] border border-[#2a2a2a] rounded-l
 function MembersContent() {
   const navigate = useNavigate();
   const { open: drawerOpen, close: closeDrawer } = useAdminDrawer();
+  const isMobile = useIsMobile();
   const { all, authUsers, loading } = useMembersWithAccounts();
   const { data: profileDocs = [] } = useMemberProfileDocs();
   const { user } = useAuth();
@@ -34,6 +37,7 @@ function MembersContent() {
   const [isNew, setIsNew] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const selected = isAdmin
     ? (all.find(m => m.id === selectedId) || null)
@@ -88,6 +92,14 @@ function MembersContent() {
     setDirty(false);
     setSearchParams({ m: id }, { replace: false });
     closeDrawer();
+  }
+
+  // Closes the mobile fullscreen detail view, back to the roster list.
+  function closeMobileDetail() {
+    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    setIsNew(false);
+    setDirty(false);
+    setSearchParams({}, { replace: true });
   }
 
   function addNew() {
@@ -189,7 +201,10 @@ function MembersContent() {
 
   // ── Left: roster ───────────────────────────────────────────────────────
   const leftPanel = (
-    <div className={`admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left${drawerOpen ? ' drawer-open' : ''}`}>
+    <div className={isMobile
+      ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[#1a1a1a] text-left'
+      : `admin-drawer flex flex-col overflow-hidden bg-[#1a1a1a] border-r border-[#2a2a2a] text-left${drawerOpen ? ' drawer-open' : ''}`
+    }>
       <div className="shrink-0 px-4 min-h-[44px] flex items-center justify-between border-b border-[#2a2a2a]">
         <span className="text-xs font-semibold uppercase tracking-wider text-[#888]">Members</span>
         <span className="text-[11px] text-[#555]">{all.length}</span>
@@ -235,11 +250,11 @@ function MembersContent() {
     <div className="relative flex-1 min-w-0 flex flex-col overflow-hidden bg-[#121212] text-left">
       <div className="shrink-0 px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2">
         <button
-          onClick={() => navigate('/admin')}
+          onClick={isMobile && isAdmin ? closeMobileDetail : () => navigate('/admin')}
           className="shrink-0 w-11 h-11 flex items-center justify-center text-[#888] hover:text-white rounded-lg hover:bg-white/5 transition-colors"
-          title="Back to admin"
+          title={isMobile && isAdmin ? 'Back to roster' : 'Back to admin'}
         >
-          <i className="fas fa-arrow-left text-sm" />
+          <i className={`fas ${isMobile && isAdmin ? 'fa-times' : 'fa-arrow-left'} text-sm`} />
         </button>
         <h1 className="flex-1 min-w-0 text-base font-bold text-white truncate">
           {!isAdmin ? 'My Details' : isNew ? 'New Member' : selected ? selected.name : 'Member Management'}
@@ -406,12 +421,21 @@ function MembersContent() {
               </p>
 
               <Field label="Photo URL">
-                <input
-                  className={INPUT}
-                  value={profile.photoUrl}
-                  onChange={e => setProf('photoUrl', e.target.value)}
-                  placeholder="https://.../photo.jpg"
-                />
+                <div className="flex gap-2">
+                  <input
+                    className={INPUT}
+                    value={profile.photoUrl}
+                    onChange={e => setProf('photoUrl', e.target.value)}
+                    placeholder="https://.../photo.jpg"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    className="shrink-0 px-3 py-2.5 bg-[#121212] border border-[#2a2a2a] rounded-lg text-xs font-semibold text-[#ccc] hover:text-white hover:border-[#00ddde]/50 transition-colors whitespace-nowrap"
+                  >
+                    <i className="fas fa-images mr-1.5" />Gallery
+                  </button>
+                </div>
                 {profile.photoUrl && !safeUrl(profile.photoUrl) && (
                   <p className="text-[11px] text-red-400 mt-1">
                     Needs to be a full http:// or https:// link.
@@ -611,18 +635,23 @@ function MembersContent() {
           </button>
         </div>
       )}
+      <PhotoPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={photo => setProf('photoUrl', photo.url)}
+      />
     </div>
   );
 
   if (adminLoading) {
-    return <AdminShell activeApp="members"><div className="flex-1" /></AdminShell>;
+    return <AdminShell activeApp="members" hideDrawerToggle><div className="flex-1" /></AdminShell>;
   }
 
   // A member whose account has not been linked to a roster entry has nothing
   // to edit. Say so plainly rather than showing an empty form.
   if (!isAdmin && !ownMember) {
     return (
-      <AdminShell activeApp="members">
+      <AdminShell activeApp="members" hideDrawerToggle>
         <div className="flex-1 flex items-center justify-center text-center px-6">
           <div className="max-w-sm">
             <i className="fas fa-user-lock text-4xl text-[#333] mb-4 block" />
@@ -638,12 +667,25 @@ function MembersContent() {
   }
 
   return (
-    <AdminShell activeApp="members">
+    <AdminShell activeApp="members" hideDrawerToggle={isMobile || !isAdmin}>
       {isAdmin ? (
-        <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
-          {leftPanel}
-          {rightPanel}
-        </div>
+        isMobile ? (
+          <>
+            {/* Mobile: the roster is the primary view */}
+            {leftPanel}
+            {/* Fullscreen detail/edit — closed with the X in its header */}
+            {(selectedId || isNew) && (
+              <div className="fixed inset-0 z-50 bg-[#121212] flex flex-col">
+                {rightPanel}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="admin-page-grid flex-1 min-h-0 grid overflow-hidden">
+            {leftPanel}
+            {rightPanel}
+          </div>
+        )
       ) : (
         // Single pane: a member manages only themselves, so there is no roster
         // to browse and the sidebar would be an empty column.

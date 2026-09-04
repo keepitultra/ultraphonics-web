@@ -40,6 +40,7 @@ const APPS = [
   { id: 'clients',   label: 'Clients',   path: '/clients',   icon: 'fa-address-book',   color: '#00ddde' },
   { id: 'shows',     label: 'Shows',     path: '/shows',     icon: 'fa-calendar-days',  color: '#a78bfa' },
   { id: 'calendar',  label: 'Calendar',  path: '/calendar',  icon: 'fa-calendar-check', color: '#14b8a6' },
+  { id: 'gallery',   label: 'Gallery',   path: '/gallery',   icon: 'fa-images',         color: '#fb923c' },
   { id: 'quotes',    label: 'Quotes',    path: '/quotes',    icon: 'fa-file-invoice-dollar', color: '#ec4899' },
   { id: 'requests',  label: 'Requests',  path: '/requests',  icon: 'fa-hand-point-up',  color: '#f59e0b' },
 ];

@@ -5,7 +5,7 @@ import AuthGuard from '../../components/AuthGuard.jsx';
 import SettingsModal from '../../components/admin/SettingsModal.jsx';
 import HeadsUpSection from '../../components/admin/HeadsUpSection.jsx';
 import { useAuth } from '../../firebase/AuthContext.jsx';
-import { useSetlists, useSongs, useClients, useShows, useMemberProfiles, useQuotes } from '../../firebase/useFirestore.js';
+import { useSetlists, useSongs, useClients, useShows, useMemberProfiles, useQuotes, useGalleryPhotos } from '../../firebase/useFirestore.js';
 
 // ── App tile (large, colored accent) ────────────────────────────────────────
 function AppTile({ to, href, color, icon, title, subtitle }) {
@@ -57,6 +57,7 @@ function AdminDashboard() {
   const { data: songs    = [] } = useSongs();
   const { data: clients  = [] } = useClients();
   const { data: shows    = [] } = useShows();
+  const { photos: galleryPhotos = [] } = useGalleryPhotos();
 
   const firstName         = user?.displayName?.split(' ')[0] || null;
   const { data: quoteLeads = [] } = useQuotes();
@@ -206,6 +207,13 @@ function AdminDashboard() {
                 icon={<i className="fas fa-calendar-check" />}
                 title="Band Calendar"
                 subtitle="Availability, shows & holds"
+              />
+              <AppTile
+                to="/gallery"
+                color="#fb923c"
+                icon={<i className="fas fa-images" />}
+                title="Gallery"
+                subtitle={`${galleryPhotos.length} photo${galleryPhotos.length !== 1 ? 's' : ''}`}
               />
               <AppTile
                 to="/quotes"
