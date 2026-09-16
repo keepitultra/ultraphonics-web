@@ -5,12 +5,18 @@
 // reusing the same OAuth Web client Firebase already created for this project
 // (see GOOGLE_OAUTH_CLIENT_ID in src/firebase-config.js).
 //
-// Scope is calendar.freebusy only — this code can learn when someone is busy,
-// never what they're busy doing. Event titles are never requested or stored.
+// Two scopes: calendar.freebusy (busy/free blocks) and
+// calendar.calendarlist.readonly (just the list of calendars a member has —
+// id, name, color — so SyncCard can let them pick which ones to sync).
+// Never calendar.readonly or anything broader: this code can learn when
+// someone is busy and what calendars they have, never what they're busy
+// doing. Event titles are never requested or stored.
 
 import { GOOGLE_OAUTH_CLIENT_ID } from '../firebase-config.js';
 
-export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.freebusy';
+export const SCOPE_FREEBUSY = 'https://www.googleapis.com/auth/calendar.freebusy';
+export const SCOPE_CALENDAR_LIST = 'https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+export const CALENDAR_SCOPE = `${SCOPE_FREEBUSY} ${SCOPE_CALENDAR_LIST}`;
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const SILENT_TIMEOUT_MS = 6000;
 const TOKEN_EXPIRY_SAFETY_MARGIN_MS = 60_000;
@@ -98,7 +104,7 @@ export async function getAccessToken(opts = {}) {
         reject(new GoogleAuthError(resp.error === 'access_denied' ? 'scope_declined' : resp.error, resp.error));
         return;
       }
-      if (!google.accounts.oauth2.hasGrantedAllScopes(resp, CALENDAR_SCOPE)) {
+      if (!google.accounts.oauth2.hasGrantedAllScopes(resp, SCOPE_FREEBUSY, SCOPE_CALENDAR_LIST)) {
         reject(new GoogleAuthError('scope_declined', 'Calendar access was not granted.'));
         return;
       }
@@ -140,13 +146,39 @@ export async function disconnect() {
 }
 
 /**
+ * List the calendars a member has access to, for SyncCard's calendar picker.
+ * minAccessRole=freeBusyReader is the lowest role in Google's hierarchy
+ * (freeBusyReader < reader < writer < owner), so this returns every calendar
+ * the member could possibly sync, not just ones they own.
+ *
+ * @param {string} accessToken
+ * @returns {Promise<Array<{id: string, name: string, primary: boolean}>>}
+ */
+export async function listCalendars(accessToken) {
+  const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=freeBusyReader&fields=items(id,summary,primary)', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (res.status === 401) throw new GoogleAuthError('token_expired', 'Google rejected the access token.');
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.error?.message || '';
+    throw new Error(`Google Calendar list request failed (${res.status})${detail ? `: ${detail}` : '.'}`);
+  }
+
+  const data = await res.json();
+  return (data.items || []).map(c => ({ id: c.id, name: c.summary || c.id, primary: !!c.primary }));
+}
+
+/**
  * @param {string} accessToken
  * @param {Date} timeMin
  * @param {Date} timeMax
  * @param {string} timeZone IANA zone, e.g. 'America/Detroit'
- * @returns {Promise<Array<{start: string, end: string}>>} RFC3339 busy intervals
+ * @param {string[]} calendarIds
+ * @returns {Promise<Array<{start: string, end: string}>>} RFC3339 busy intervals, merged across calendars
  */
-export async function fetchFreeBusy(accessToken, timeMin, timeMax, timeZone) {
+export async function fetchFreeBusy(accessToken, timeMin, timeMax, timeZone, calendarIds) {
   const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
     method: 'POST',
     headers: {
@@ -157,7 +189,7 @@ export async function fetchFreeBusy(accessToken, timeMin, timeMax, timeZone) {
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
       timeZone,
-      items: [{ id: 'primary' }],
+      items: calendarIds.map(id => ({ id })),
     }),
   });
 
@@ -174,10 +206,17 @@ export async function fetchFreeBusy(accessToken, timeMin, timeMax, timeZone) {
   }
 
   const data = await res.json();
-  const cal = data?.calendars?.primary;
-  if (!cal) throw new Error('Google Calendar returned no data for the primary calendar.');
-  if (cal.errors?.length) throw new Error(cal.errors.map(e => e.reason).join(', '));
-  return cal.busy || [];
+  const cals = data?.calendars || {};
+  if (!Object.keys(cals).length) throw new Error('Google Calendar returned no data for the selected calendars.');
+
+  // A revoked/deleted calendar errors individually without failing the rest
+  // of the sync — the other selected calendars' busy data still counts.
+  const busy = [];
+  for (const cal of Object.values(cals)) {
+    if (cal.errors?.length) continue;
+    busy.push(...(cal.busy || []));
+  }
+  return busy;
 }
 
 /**
@@ -192,15 +231,16 @@ export async function fetchFreeBusy(accessToken, timeMin, timeMax, timeZone) {
  * @param {Date} timeMin
  * @param {Date} timeMax
  * @param {string} timeZone
+ * @param {string[]} calendarIds defaults to just the primary calendar
  */
-export async function fetchFreeBusyChunked(accessToken, timeMin, timeMax, timeZone) {
+export async function fetchFreeBusyChunked(accessToken, timeMin, timeMax, timeZone, calendarIds = ['primary']) {
   const busy = [];
   let chunkStart = new Date(timeMin);
   while (chunkStart < timeMax) {
     const chunkEnd = new Date(chunkStart);
     chunkEnd.setMonth(chunkEnd.getMonth() + 1);
     if (chunkEnd > timeMax) chunkEnd.setTime(timeMax.getTime());
-    const chunk = await fetchFreeBusy(accessToken, chunkStart, chunkEnd, timeZone);
+    const chunk = await fetchFreeBusy(accessToken, chunkStart, chunkEnd, timeZone, calendarIds);
     busy.push(...chunk);
     chunkStart = chunkEnd;
   }

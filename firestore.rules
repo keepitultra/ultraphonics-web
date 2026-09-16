@@ -238,6 +238,26 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Google Calendar sync preferences ───────────────────────────────────
+    // One doc per member: calendarSyncPrefs/{memberId} — which of their
+    // Google calendars feed the free/busy sync (SyncCard.jsx's calendar
+    // picker). Only calendar ids/names the member already granted
+    // calendar.calendarlist.readonly access to are ever stored here, never
+    // event data. Same ownership rule as availability above.
+    function isValidCalendarSyncPrefs(memberId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['memberId', 'calendarIds', 'updatedAt'])
+        && d.memberId == memberId
+        && d.calendarIds is list && d.calendarIds.size() <= 50;
+    }
+
+    match /calendarSyncPrefs/{memberId} {
+      allow read: if isAllowedUser();
+      allow write: if isAllowedUser() && isValidCalendarSyncPrefs(memberId)
+        && (isAdmin() || ownsMember(memberId));
+      allow delete: if isAdmin();
+    }
+
     // ── Band events (rehearsals, holds, deadlines, blackouts) ─────────────
     // Deliberately looser than availability: shared band-operational records,
     // not per-person claims — same posture as shows and setlists.

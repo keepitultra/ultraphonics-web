@@ -34,6 +34,7 @@ const COLLECTIONS = {
   MEMBERS: 'members',
   MEMBER_PROFILES: 'memberProfiles',
   AVAILABILITY: 'availability',
+  CALENDAR_SYNC_PREFS: 'calendarSyncPrefs',
   BAND_EVENTS: 'bandEvents',
   GALLERY_PHOTOS: 'galleryPhotos'
 };
@@ -890,6 +891,28 @@ export async function saveSyncedMonth(memberId, month, nextSynced, prevSynced = 
     { id, memberId, month, synced, syncedAt: now, syncedTz: tz || '', updatedAt: now },
     { merge: true },
   );
+}
+
+/**
+ * Which of a member's Google calendars feed their free/busy sync.
+ * @param {string} memberId
+ * @returns {Promise<{memberId: string, calendarIds: string[], updatedAt: string} | null>}
+ */
+export async function getSyncCalendarPrefs(memberId) {
+  const snap = await getDoc(doc(db, COLLECTIONS.CALENDAR_SYNC_PREFS, memberId));
+  return snap.exists() ? snap.data() : null;
+}
+
+/**
+ * @param {string} memberId
+ * @param {string[]} calendarIds
+ */
+export async function saveSyncCalendarPrefs(memberId, calendarIds) {
+  await setDoc(doc(db, COLLECTIONS.CALENDAR_SYNC_PREFS, memberId), {
+    memberId,
+    calendarIds,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 // ============= BAND EVENTS =============

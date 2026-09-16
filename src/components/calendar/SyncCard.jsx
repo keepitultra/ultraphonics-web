@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { getAccessToken, fetchFreeBusyChunked, hasValidToken, disconnect, GoogleAuthError } from '../../services/googleCalendar.js';
-import { saveSyncedMonth } from '../../firestore-service.js';
+import { useEffect, useState } from 'react';
+import { getAccessToken, fetchFreeBusyChunked, listCalendars, hasValidToken, disconnect, GoogleAuthError } from '../../services/googleCalendar.js';
+import { saveSyncedMonth, getSyncCalendarPrefs, saveSyncCalendarPrefs } from '../../firestore-service.js';
 import { busyToDayStates, splitByMonth, monthOf, addMonths } from '../../utils/availability.js';
 
 const SYNC_MONTHS_BACK = 1;
@@ -35,6 +35,30 @@ export default function SyncCard({ open, onClose, member, userEmail, syncedDocsB
   const [message, setMessage] = useState('');
   const [lastSyncedAt, setLastSyncedAt] = useState(() => latestSyncedAt(syncedDocsByMonth));
 
+  // Which of the member's Google calendars feed the sync. `calendars` is the
+  // full list from Google (null until loaded); `selectedIds` is null until
+  // prefs load or a list load sets a default — null means "not chosen yet",
+  // so runSync falls back to ['primary'], matching pre-picker behavior for
+  // anyone who's never loaded their calendar list.
+  const [calendars, setCalendars] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(null);
+  const [pickerStatus, setPickerStatus] = useState('idle'); // idle | loading | error
+
+  useEffect(() => {
+    setCalendars(null);
+    setSelectedIds(null);
+    setPickerStatus('idle');
+    if (!member) return;
+    let cancelled = false;
+    getSyncCalendarPrefs(member.id).then(prefs => {
+      if (!cancelled && prefs?.calendarIds?.length) setSelectedIds(prefs.calendarIds);
+    }).catch(() => {}); // no saved prefs yet (or rules not deployed) — falls back to ['primary']
+    // Already connected from an earlier visit — show the real calendar list
+    // right away instead of waiting for a sync click.
+    if (hasValidToken()) loadCalendars(false);
+    return () => { cancelled = true; };
+  }, [member?.id]);
+
   if (!open) return null;
 
   if (!member) {
@@ -47,11 +71,42 @@ export default function SyncCard({ open, onClose, member, userEmail, syncedDocsB
     );
   }
 
+  async function loadCalendars(interactive) {
+    setPickerStatus('loading');
+    try {
+      const { accessToken } = await getAccessToken({ interactive, hint: userEmail });
+      const list = await listCalendars(accessToken);
+      setCalendars(list);
+      setSelectedIds(prev => (prev && prev.length ? prev : list.filter(c => c.primary).map(c => c.id)));
+      setPickerStatus('idle');
+      return accessToken;
+    } catch (err) {
+      setPickerStatus('error');
+      const msg = errorMessage(err);
+      if (msg) setMessage(msg);
+      return null;
+    }
+  }
+
+  function toggleCalendar(id) {
+    setSelectedIds(prev => {
+      const set = new Set(prev || []);
+      if (set.has(id)) set.delete(id); else set.add(id);
+      const next = [...set];
+      saveSyncCalendarPrefs(member.id, next).catch(() => {});
+      return next;
+    });
+  }
+
   async function runSync(interactive) {
     setStatus('syncing');
     setMessage('');
     try {
       const { accessToken } = await getAccessToken({ interactive, hint: userEmail });
+      // Reuse this token to populate the calendar list too, so first-time
+      // connectors see it immediately instead of it staying empty until
+      // their next sync.
+      if (!calendars) await loadCalendars(false).catch(() => {});
 
       const thisMonth = monthOf(new Date().toISOString().slice(0, 10));
       const startMonth = addMonths(thisMonth, -SYNC_MONTHS_BACK);
@@ -59,8 +114,9 @@ export default function SyncCard({ open, onClose, member, userEmail, syncedDocsB
       const timeMin = new Date(); timeMin.setMonth(timeMin.getMonth() - SYNC_MONTHS_BACK, 1);
       const timeMax = new Date(); timeMax.setMonth(timeMax.getMonth() + SYNC_MONTHS_FORWARD + 1, 1);
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const calendarIds = selectedIds?.length ? selectedIds : ['primary'];
 
-      const busy = await fetchFreeBusyChunked(accessToken, timeMin, timeMax, tz);
+      const busy = await fetchFreeBusyChunked(accessToken, timeMin, timeMax, tz, calendarIds);
       const dayStates = busyToDayStates(busy);
       const byMonth = splitByMonth(dayStates);
 
@@ -104,15 +160,45 @@ export default function SyncCard({ open, onClose, member, userEmail, syncedDocsB
           <button onClick={onClose} className="text-[#666] hover:text-white text-lg leading-none">&times;</button>
         </div>
 
-        {hasValidToken() && (
-          <button onClick={handleDisconnect} className="text-[#666] hover:text-white text-[11px]">Disconnect</button>
-        )}
+        <div className="flex items-center justify-between gap-2">
+          {lastSyncedAt ? (
+            <p className="text-[11px] text-[#555]">Last synced {new Date(lastSyncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+          ) : (
+            <p className="text-[11px] text-[#555]">Not synced yet — busy days from your calendar will show up automatically once you connect.</p>
+          )}
+          {hasValidToken() && (
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              className="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg text-[#888] border border-[#2a2a2a] hover:text-white hover:border-[#444] transition-colors"
+            >
+              Disconnect
+            </button>
+          )}
+        </div>
 
-        {lastSyncedAt ? (
-          <p className="text-[11px] text-[#555]">Last synced {new Date(lastSyncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
-        ) : (
-          <p className="text-[11px] text-[#555]">Not synced yet — busy days from your calendar will show up automatically once you connect.</p>
-        )}
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-[#888] font-semibold">
+            <i className="fas fa-calendar-days mr-1.5" />Calendars to sync
+          </p>
+          <div className="bg-[#121212] border border-[#2a2a2a] rounded-lg p-2 space-y-0.5 max-h-40 overflow-y-auto">
+            {pickerStatus === 'loading' && <p className="text-[11px] text-[#666] p-1">Loading your calendars…</p>}
+            {pickerStatus === 'error' && <p className="text-[11px] text-[#ef4444] p-1">Couldn’t load your calendars — connect below to try again.</p>}
+            {pickerStatus === 'idle' && !calendars && <p className="text-[11px] text-[#666] p-1">Connect below to see and choose your calendars.</p>}
+            {calendars?.length === 0 && <p className="text-[11px] text-[#666] p-1">No calendars found.</p>}
+            {calendars?.map(cal => (
+              <label key={cal.id} className="flex items-center gap-2 text-[12px] text-[#ccc] px-1 py-1 rounded hover:bg-[#1a1a1a] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={(selectedIds || []).includes(cal.id)}
+                  onChange={() => toggleCalendar(cal.id)}
+                  className="accent-[#14b8a6]"
+                />
+                <span className="truncate">{cal.name}{cal.primary ? ' (main)' : ''}</span>
+              </label>
+            ))}
+          </div>
+        </div>
 
         <button
           type="button"
